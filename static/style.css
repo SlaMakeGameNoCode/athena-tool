@@ -541,3 +541,37 @@ input:focus {
 @keyframes spin {
     to { transform: rotate(360deg); }
 }
+
+/* FILTER BAR STYLES */
+.filter-bar {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 15px;
+}
+
+.filter-capsule {
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--panel-border);
+    color: var(--text-secondary);
+    transition: all 0.2s ease;
+    outline: none;
+}
+
+.filter-capsule:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+
+.filter-capsule.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.4);
+}
+

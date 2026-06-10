@@ -18,6 +18,146 @@ document.addEventListener('DOMContentLoaded', () => {
     let rawTasks = [];
     let processedTasks = [];
     let excludedRooms = [];
+    let currentRawFilter = 'all';
+    let currentProcessedFilter = 'all';
+    let activePlatforms = ['rocket'];
+    let processedTasksContent = '';
+
+    function updateActivePlatforms(platforms) {
+        activePlatforms = ['rocket'];
+        if (platforms && platforms.length > 0) {
+            platforms.forEach(p => {
+                if (p.type && !activePlatforms.includes(p.type)) {
+                    activePlatforms.push(p.type);
+                }
+            });
+        }
+        renderFilterBars();
+    }
+
+    function renderFilterBars() {
+        const rawBar = document.getElementById('raw-filter-bar');
+        const processedBar = document.getElementById('processed-filter-bar');
+        
+        if (!rawBar || !processedBar) return;
+        
+        const labels = {
+            'all': 'Tất cả',
+            'rocket': 'Rocket.Chat',
+            'git': 'Git (Local)',
+            'email': 'Email (IMAP)',
+            'slack': 'Slack',
+            'telegram': 'Telegram'
+        };
+        
+        const renderBar = (bar, currentFilter, setFilterFn, onFilterChange) => {
+            bar.innerHTML = '';
+            
+            const allBtn = document.createElement('button');
+            allBtn.className = `filter-capsule ${currentFilter === 'all' ? 'active' : ''}`;
+            allBtn.textContent = 'Tất cả';
+            allBtn.addEventListener('click', () => {
+                setFilterFn('all');
+                onFilterChange();
+            });
+            bar.appendChild(allBtn);
+            
+            activePlatforms.forEach(p => {
+                if (p === 'all') return;
+                const btn = document.createElement('button');
+                btn.className = `filter-capsule ${currentFilter === p ? 'active' : ''}`;
+                btn.textContent = labels[p] || p;
+                btn.addEventListener('click', () => {
+                    setFilterFn(p);
+                    onFilterChange();
+                });
+                bar.appendChild(btn);
+            });
+        };
+        
+        renderBar(rawBar, currentRawFilter, (val) => currentRawFilter = val, () => {
+            renderFilterBars();
+            renderRawTasks();
+        });
+        
+        renderBar(processedBar, currentProcessedFilter, (val) => currentProcessedFilter = val, () => {
+            renderFilterBars();
+            renderProcessedTasks();
+        });
+    }
+
+    function parseProcessedTasks(markdown) {
+        if (!markdown) return { dateHeader: '', tasks: [] };
+        const lines = markdown.split('\n');
+        const tasks = [];
+        let currentTask = null;
+        let dateHeader = '';
+        
+        for (let line of lines) {
+            line = line.trim();
+            if (line.startsWith('# Daily Tasks')) {
+                dateHeader = line;
+            } else if (line.startsWith('## Task')) {
+                if (currentTask) {
+                    tasks.push(currentTask);
+                }
+                currentTask = {
+                    project: '',
+                    platform: 'rocket',
+                    title: '',
+                    rawLines: [line]
+                };
+            } else if (currentTask) {
+                currentTask.rawLines.push(line);
+                if (line.startsWith('- **Project**:')) {
+                    currentTask.project = line.split(':', 2)[1].trim();
+                } else if (line.startsWith('- **Platform**:')) {
+                    currentTask.platform = line.split(':', 2)[1].trim().toLowerCase();
+                } else if (line.startsWith('- **Title**:')) {
+                    currentTask.title = line.split(':', 2)[1].trim();
+                }
+            }
+        }
+        if (currentTask) {
+            tasks.push(currentTask);
+        }
+        return { dateHeader, tasks };
+    }
+
+    function renderProcessedTasks() {
+        const container = document.getElementById('processed-tasks-container');
+        if (!container) return;
+        
+        if (!processedTasksContent || processedTasksContent.includes('Chưa có dữ liệu')) {
+            container.innerHTML = `<div class="empty-state">Chưa có dữ liệu. Hãy bấm "2. Tạo việc".</div>`;
+            return;
+        }
+        
+        const { dateHeader, tasks } = parseProcessedTasks(processedTasksContent);
+        
+        const filteredTasks = tasks.filter(t => {
+            if (currentProcessedFilter === 'all') return true;
+            return t.platform === currentProcessedFilter;
+        });
+        
+        if (filteredTasks.length === 0) {
+            container.innerHTML = `<div class="empty-state">Không có công việc nào thuộc nền tảng này hôm nay.</div>`;
+            return;
+        }
+        
+        let md = dateHeader + '\n\n';
+        filteredTasks.forEach((t, idx) => {
+            md += `## Task ${idx + 1}\n`;
+            t.rawLines.forEach(line => {
+                if (!line.startsWith('## Task')) {
+                    md += line + '\n';
+                }
+            });
+            md += '\n';
+        });
+        
+        container.innerHTML = `<pre style="white-space: pre-wrap; font-family: 'Inter', sans-serif;">${md.trim()}</pre>`;
+    }
 
     // --- Init ---
     fetch('/api/projects').then(res => res.json()).then(data => {
@@ -93,8 +233,10 @@ document.addEventListener('DOMContentLoaded', () => {
                                 if (p.uid && lastItem.querySelector('.plat-uid')) lastItem.querySelector('.plat-uid').value = p.uid;
                                 if (p.token && lastItem.querySelector('.plat-token')) lastItem.querySelector('.plat-token').value = p.token;
                             });
+                            updateActivePlatforms(config.platforms);
                         } else {
                             createPlatformForm('rocket');
+                            updateActivePlatforms([]);
                         }
                     } else {
                         sceneSetup.classList.remove('hidden');
@@ -314,6 +456,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if(res.ok) {
                 sceneSetup.classList.add('hidden');
                 sceneMain.classList.remove('hidden');
+                updateActivePlatforms(platforms);
             } else {
                 alert("Lỗi lưu cấu hình");
             }
@@ -569,13 +712,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderRawTasks() {
         const container = document.getElementById('raw-tasks-container');
+        if (!container) return;
+
         if (rawTasks.length === 0) {
             container.innerHTML = `<div class="empty-state">Không có việc mới hôm nay.</div>`;
             return;
         }
 
+        // Filter the tasks by platform
+        const filteredTasks = rawTasks.filter(task => {
+            if (currentRawFilter === 'all') return true;
+            
+            const roomName = task.room_name || '';
+            let platform = 'rocket';
+            if (roomName.startsWith('Git -')) {
+                platform = 'git';
+            } else if (roomName.startsWith('Email:')) {
+                platform = 'email';
+            }
+            return platform === currentRawFilter;
+        });
+
+        if (filteredTasks.length === 0) {
+            container.innerHTML = `<div class="empty-state">Không có công việc nào thuộc nền tảng này hôm nay.</div>`;
+            return;
+        }
+
         container.innerHTML = '';
-        rawTasks.forEach((task, index) => {
+        filteredTasks.forEach((task, index) => {
             const div = document.createElement('div');
             div.className = 'task-item';
             div.dataset.index = index;
@@ -634,9 +798,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     } catch(e) {
                         console.error("Lỗi khi ẩn task:", e);
                     }
+                    
+                    const idxInRaw = rawTasks.findIndex(t => t.id === task.id);
+                    if (idxInRaw !== -1) {
+                        rawTasks.splice(idxInRaw, 1);
+                    }
+                    renderRawTasks();
                 }
-                rawTasks.splice(index, 1);
-                renderRawTasks();
             });
 
             container.appendChild(div);
@@ -662,7 +830,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch('/api/taoviec/content');
             if(res.ok) {
                 const data = await res.json();
-                document.getElementById('processed-tasks-container').innerHTML = `<pre style="white-space: pre-wrap; font-family: 'Inter', sans-serif;">${data.content}</pre>`;
+                processedTasksContent = data.content;
+                renderProcessedTasks();
             }
         } catch(e) {
             console.error("Lỗi khi tải nội dung memorytask.md:", e);

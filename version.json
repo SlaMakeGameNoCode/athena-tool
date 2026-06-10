@@ -1,5 +1,5 @@
 {
-  "version": "1.0.7",
+  "version": "1.0.8",
   "released_at": "2026-06-10",
-  "changelog": "Mở rộng tính năng Chat AI: báo cáo chi tiết so sánh thay đổi Cũ -> Mới, hiển thị trực quan ngay trong khung chat"
+  "changelog": "Bổ sung bộ lọc nguồn dữ liệu (Rocket.Chat, Git, Email) dạng viên nhộng tại Tab 1 và Tab 2 giúp phân loại và quản lý công việc dễ dàng hơn"
 }
