@@ -1,0 +1,42 @@
+# Private environment variables
+.env
+.env.bak
+
+# App configuration and data files
+config.json
+projects.json
+chat_raw.json
+git_raw.json
+saved_raw_tasks.json
+memorytask.md
+tasks.json
+tasks_test_1.json
+submitted.json
+submission_status.json
+last_sync.txt
+saved_kpi_tasks.json
+
+# Local Python dependencies and browser bundles
+ms-playwright/
+__pycache__/
+*.pyc
+
+# PyInstaller build artifacts
+build/
+dist/
+
+# Logs and screenshots
+*.png
+*.html
+!static/index.html
+*.txt
+!README.md
+!requirements.txt
+
+# Scratch scripts
+scratch/
+
+# Agent/IDE directories
+.claude/
+.codex/
+.commands/

@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Athena Assistant</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <!-- SCENE: ĐĂNG NHẬP -->
+    <div id="scene-login" class="scene active glass-panel">
+        <div class="login-box">
+            <h2>Athena Assistant</h2>
+            <p>Vui lòng đăng nhập để tiếp tục</p>
+            <input type="text" id="login-username" placeholder="Tên tài khoản" value="admin">
+            <input type="password" id="login-password" placeholder="Mật khẩu" value="123456">
+            <button id="btn-login" class="btn primary">Đăng nhập</button>
+            <p id="login-error" class="error-text hidden"></p>
+        </div>
+    </div>
+
+    <!-- SCENE: CÀI ĐẶT -->
+    <div id="scene-setup" class="scene glass-panel hidden">
+        <div class="setup-box">
+            <h2>Cài đặt Ban đầu</h2>
+            
+            <div class="form-group">
+                <label>Họ tên</label>
+                <input type="text" id="setup-name" placeholder="VD: Chu Văn Mai">
+            </div>
+            <div class="form-group">
+                <label>Chức danh / Vị trí</label>
+                <input type="text" id="setup-role" placeholder="VD: Team Lead Game Designer & PM">
+            </div>
+            
+            <hr>
+            
+            <div class="form-group">
+                <label>Nhà cung cấp AI</label>
+                <select id="setup-ai-provider" style="width: 100%; padding: 12px 16px; margin-bottom: 15px; border-radius: 8px; border: 1px solid var(--panel-border); background: var(--input-bg); color: var(--text-primary);">
+                    <option value="gemini">Google Gemini</option>
+                    <option value="openai">OpenAI (ChatGPT)</option>
+                    <option value="deepseek">DeepSeek</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>API Key cho AI</label>
+                <input type="password" id="setup-ai-key" placeholder="Nhập API Key tương ứng">
+                <div style="display: flex; gap: 10px; align-items: center; margin-top: -5px; margin-bottom: 15px;">
+                    <button id="btn-test-ai" class="btn outline" style="width: auto; padding: 6px 12px;">Test API</button>
+                    <span id="res-test-ai" style="font-size: 0.85rem;"></span>
+                </div>
+            </div>
+
+            <hr>
+
+            <div class="form-group">
+                <label>Cấu hình WorkAI</label>
+                <input type="text" id="setup-workai-user" placeholder="Tên đăng nhập WorkAI">
+                <input type="password" id="setup-workai-pass" placeholder="Mật khẩu WorkAI">
+                <div style="display: flex; gap: 10px; align-items: center; margin-top: -5px;">
+                    <button id="btn-test-workai" class="btn outline" style="width: auto; padding: 6px 12px;">Test Đăng nhập</button>
+                    <span id="res-test-workai" style="font-size: 0.85rem;"></span>
+                </div>
+            </div>
+
+            <hr>
+            
+            <div class="platforms-container">
+                <h3>Các nguồn dữ liệu Chat/Email</h3>
+                <div id="platforms-list" style="margin-bottom: 15px; display: flex; flex-direction: column; gap: 15px;">
+                    <!-- Nơi chứa các form nền tảng -->
+                </div>
+                <div style="display: flex; gap: 10px; margin-top: 10px;">
+                    <select id="new-plat-type" style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--panel-border); background: var(--input-bg); color: var(--text-primary); outline: none;">
+                        <option value="rocket">Rocket.Chat</option>
+
+                        <option value="telegram">Telegram</option>
+                        <option value="email">Email (IMAP)</option>
+                        <option value="slack">Slack</option>
+                        <option value="git">Git (Local)</option>
+                    </select>
+                    <button id="btn-add-platform" class="btn outline" style="width: auto; padding: 8px 16px;">+ Thêm nền tảng</button>
+                </div>
+            </div>
+
+            <button id="btn-save-setup" class="btn primary mt-20">Lưu & Bắt đầu sử dụng</button>
+        </div>
+    </div>
+
+    <!-- SCENE: NGƯỜI DÙNG -->
+    <div id="scene-main" class="scene hidden">
+        
+        <!-- Khu vực 1: Công cụ (Sidebar trái) -->
+        <div class="area-tools glass-panel">
+            <div class="logo">Athena <span id="app-version-badge" class="version-badge"></span></div>
+            
+            <!-- Update Banner -->
+            <div id="update-banner" class="update-banner hidden">
+                <div class="update-banner-icon">🔄</div>
+                <div class="update-banner-text">
+                    <strong>Có bản cập nhật mới!</strong>
+                    <span id="update-version-info"></span>
+                    <p id="update-changelog" class="update-changelog"></p>
+                </div>
+                <button id="btn-apply-update" class="btn update-btn">Cập nhật</button>
+            </div>
+            <div id="update-progress" class="update-progress hidden">
+                <div class="update-progress-spinner"></div>
+                <span>Đang cập nhật...</span>
+            </div>
+
+            <button id="btn-tool-tonghop" class="btn tool-btn">1. Tổng hợp</button>
+            <button id="btn-restore-tasks" class="btn outline tool-btn" style="border-color: #555; color: #888; font-size: 0.8rem; height: 30px; margin-top: 5px;">⟲ Phục hồi xóa</button>
+            <button id="btn-tool-taoviec" class="btn tool-btn" style="margin-top: 15px;">2. Tạo việc</button>
+            <button id="btn-tool-nhapviec" class="btn tool-btn">3. Nhập việc</button>
+            <button id="btn-tool-suakpi" class="btn tool-btn outline" style="border-color: #f59e0b; color: #f59e0b;">4. Sửa KPI</button>
+            
+            <div class="divider"></div>
+            <button id="btn-scan-projects" class="btn tool-btn outline">Làm mới Dự án WorkAI</button>
+            <button id="btn-settings" class="btn tool-btn outline">Cài đặt</button>
+        </div>
+
+        <!-- Khu vực 2: Danh sách đầu việc -->
+        <div class="area-workspace glass-panel">
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="tab-raw">Nội dung thô</button>
+                <button class="tab-btn" data-tab="tab-processed">Nội dung sau khi Tạo việc</button>
+                <button class="tab-btn" data-tab="tab-suakpi">Sửa KPI</button>
+            </div>
+            
+            <div class="tab-content active" id="tab-raw">
+                <div style="display: flex; justify-content: flex-end; margin-bottom: 10px;">
+                    <button id="btn-refresh-raw" class="btn outline" style="width: auto; padding: 6px 12px; font-size: 0.85rem;">⟲ Làm mới nội dung</button>
+                </div>
+                <div class="task-list-header">
+                    <span>Trạng thái</span>
+                    <span>Nội dung Chat (Thô)</span>
+                    <span>Dự án WorkAI</span>
+                </div>
+                <div id="raw-tasks-container">
+                    <!-- JS render tasks here -->
+                    <div class="empty-state">Chưa có dữ liệu. Hãy bấm "1. Tổng hợp".</div>
+                </div>
+            </div>
+
+            <div class="tab-content" id="tab-processed">
+                <div style="display: flex; justify-content: flex-end; margin-bottom: 10px;">
+                    <button id="btn-refresh-processed" class="btn outline" style="width: auto; padding: 6px 12px; font-size: 0.85rem;">⟲ Làm mới nội dung</button>
+                </div>
+                <div id="processed-tasks-container">
+                    <!-- JS render memorytask.md content here -->
+                    <div class="empty-state">Chưa có dữ liệu. Hãy bấm "2. Tạo việc".</div>
+                </div>
+            </div>
+
+            <div class="tab-content" id="tab-suakpi">
+                <div style="display: flex; justify-content: flex-end; margin-bottom: 10px;">
+                    <button id="btn-refresh-kpi" class="btn outline" style="width: auto; padding: 6px 12px; font-size: 0.85rem;">⟲ Làm mới nội dung</button>
+                </div>
+                <div id="kpi-tasks-container">
+                    <!-- JS render kpi tasks here -->
+                    <div class="empty-state">Chưa có dữ liệu. Hãy bấm "4. Sửa KPI".</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Khu vực 3: AI Chat -->
+        <div class="area-ai-chat glass-panel">
+            <div class="chat-header">Athena AI</div>
+            <div class="chat-messages" id="chat-messages">
+                <div class="msg ai">Chào bạn, tôi là Athena AI. Bạn có thể yêu cầu tôi sửa nội dung các đầu việc bằng cách chỉ định số thứ tự của nó (VD: "Sửa đầu việc số 2 thành...").</div>
+            </div>
+            <div class="chat-input-container">
+                <input type="text" id="chat-input" placeholder="Nhập yêu cầu cho AI...">
+                <button id="btn-send-chat" class="btn primary">Gửi</button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- OVERLAY TIẾN TRÌNH NHẬP VIỆC -->
+    <div id="progress-overlay" class="scene hidden" style="z-index: 10000; flex-direction: column; background: rgba(15, 23, 42, 0.85); position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: none; justify-content: center; align-items: center;">
+        <div style="background: rgba(30, 41, 59, 0.8); padding: 40px; border-radius: 16px; border: 1px solid var(--panel-border); text-align: center; width: 100%; max-width: 500px; box-shadow: 0 8px 32px rgba(0,0,0,0.5);">
+            <h3 id="progress-title" style="margin-bottom: 20px; font-size: 1.3rem; color: white;">Đang nhập việc lên WorkAI...</h3>
+            
+            <div style="width: 100%; height: 12px; background: rgba(255,255,255,0.1); border-radius: 6px; overflow: hidden; margin-bottom: 15px; position: relative;">
+                <div id="progress-bar-fill" style="width: 0%; height: 100%; background: linear-gradient(90deg, #3b82f6, #60a5fa); border-radius: 6px; transition: width 0.4s ease; box-shadow: 0 0 8px #3b82f6;"></div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-bottom: 20px; font-size: 0.9rem; color: var(--text-secondary);">
+                <span id="progress-percent">0%</span>
+                <span id="progress-count">0/0</span>
+            </div>
+            
+            <div id="progress-msg" style="font-size: 0.95rem; color: #93c5fd; min-height: 40px; line-height: 1.4; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 15px;">
+                Đang khởi động...
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL QUẢN LÝ NHÓM LOẠI TRỪ (ROCKET.CHAT) -->
+    <div id="blacklist-modal" class="modal-overlay hidden">
+        <div class="modal-content glass-panel">
+            <div class="modal-header">
+                <h3>Quản lý Nhóm loại trừ (Rocket.Chat)</h3>
+                <span class="close-modal" id="btn-close-modal">&times;</span>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 15px;">Các nhóm chat/phòng chat nằm trong danh sách này sẽ bị bỏ qua và không tự động cào tin nhắn.</p>
+                <div id="blacklist-items-list" class="blacklist-list">
+                    <!-- Danh sách nhóm loại trừ sẽ được Javascript render ở đây -->
+                </div>
+                <div style="display: flex; gap: 10px; margin-top: 15px;">
+                    <input type="text" id="input-new-blacklist" placeholder="Nhập tên nhóm cần loại trừ" style="flex: 1; margin: 0;">
+                    <button id="btn-add-blacklist" class="btn primary" style="width: auto; padding: 8px 16px;">+ Thêm</button>
+                </div>
+            </div>
+            <div class="modal-footer" style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 10px;">
+                <button id="btn-cancel-blacklist" class="btn outline" style="width: auto; padding: 8px 16px;">Đóng</button>
+                <button id="btn-save-blacklist" class="btn primary" style="width: auto; padding: 8px 16px;">Lưu lại</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
