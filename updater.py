@@ -77,7 +77,9 @@ def check_update(current_version):
         dict: {has_update, current_version, remote_version, changelog, released_at}
     """
     try:
-        resp = requests.get(VERSION_URL, timeout=10)
+        import time
+        url = f"{VERSION_URL}?t={int(time.time())}"
+        resp = requests.get(url, timeout=10)
         resp.raise_for_status()
         remote = resp.json()
         remote_ver = remote.get("version", "0.0.0")
