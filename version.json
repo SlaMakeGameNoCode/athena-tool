@@ -1,5 +1,5 @@
 {
-  "version": "1.0.6",
+  "version": "1.0.7",
   "released_at": "2026-06-10",
-  "changelog": "Khắc phục hoàn toàn lỗi giải mã ký tự có dấu (unicode/khoảng trắng) khi tự khởi động lại App trên Windows"
+  "changelog": "Mở rộng tính năng Chat AI: báo cáo chi tiết so sánh thay đổi Cũ -> Mới, hiển thị trực quan ngay trong khung chat"
 }

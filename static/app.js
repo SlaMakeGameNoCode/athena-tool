@@ -775,7 +775,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const aiMsg = document.createElement('div');
             aiMsg.className = 'msg ai';
-            aiMsg.textContent = data.reply;
+            
+            // Simple markdown formatter
+            const formatReply = (txt) => {
+                if (!txt) return "";
+                let esc = txt
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#039;");
+                esc = esc.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+                esc = esc.replace(/\*(.*?)\*/g, "<em>$1</em>");
+                esc = esc.replace(/^[-\*]\s+(.*)/gm, "• $1");
+                esc = esc.replace(/\n/g, "<br>");
+                return esc;
+            };
+            
+            aiMsg.innerHTML = formatReply(data.reply);
             chatMessages.appendChild(aiMsg);
             chatMessages.scrollTop = chatMessages.scrollHeight;
 

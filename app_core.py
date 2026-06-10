@@ -9,7 +9,7 @@ import os
 import sys
 import json
 
-APP_VERSION = "1.0.6"
+APP_VERSION = "1.0.7"
 
 app = FastAPI(title="Athena Assistant App")
 
@@ -647,10 +647,20 @@ def ai_chat(req: ChatRequest):
                 
             new_content = edit_task_with_ai(content, req.message, provider, api_key)
             
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(new_content)
+            # Thử parse JSON
+            try:
+                parsed = json.loads(new_content)
+                updated_content = parsed.get("updated_content", "")
+                explanation = parsed.get("explanation", "Đã cập nhật lại nội dung ở Tab 2.")
+            except Exception:
+                # Fallback nếu AI trả về raw markdown trực tiếp
+                updated_content = new_content
+                explanation = "Đã cập nhật lại nội dung ở Tab 2."
                 
-            return {"reply": "Đã cập nhật lại nội dung ở Tab 2. Bạn hãy tải lại/chuyển tab để xem."}
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(updated_content)
+                
+            return {"reply": explanation}
         elif req.active_tab == "tab-raw":
             file_path = os.path.join(BASE_DIR, "saved_raw_tasks.json")
             if not os.path.exists(file_path):
@@ -670,36 +680,53 @@ def ai_chat(req: ChatRequest):
                     print(f"Lỗi AI trả về JSON không hợp lệ. Nội dung: {new_content[:500]}...")
                     return {"reply": "Lỗi: AI trả về định dạng dữ liệu không hợp lệ. Vui lòng thử lại với yêu cầu rõ ràng hơn."}
             
-            # Xử lý 2 chế độ phản hồi
-            import time
-            now_ms = int(time.time() * 1000)
+            # Xử lý wrapper JSON
+            explanation = "Đã cập nhật xong danh sách ở Tab 1."
             
-            if isinstance(parsed, dict) and parsed.get("mode") == "patch":
-                # CHẾ ĐỘ 2: Patch mode - AI chỉ trả về thay đổi
-                existing_tasks = json.loads(content)
+            if isinstance(parsed, dict):
+                explanation = parsed.get("explanation", explanation)
+                mode = parsed.get("mode", "full")
                 
-                # Ẩn các task gốc
-                hide_ids = parsed.get("hide_ids", [])
-                for t in existing_tasks:
-                    if t.get("id") in hide_ids:
-                        t["status"] = "hide"
+                import time
+                now_ms = int(time.time() * 1000)
                 
-                # Thêm các task mới
-                new_tasks = parsed.get("new_tasks", [])
-                for i, nt in enumerate(new_tasks):
-                    nt["id"] = f"task_{now_ms}_{i}"
-                    nt["status"] = "active"
-                    existing_tasks.append(nt)
+                if mode == "patch" or "new_tasks" in parsed:
+                    # CHẾ ĐỘ 2: Patch mode
+                    existing_tasks = json.loads(content)
+                    
+                    # Ẩn các task gốc
+                    hide_ids = parsed.get("hide_ids", [])
+                    for t in existing_tasks:
+                        if t.get("id") in hide_ids:
+                            t["status"] = "hide"
+                    
+                    # Thêm các task mới
+                    new_tasks = parsed.get("new_tasks", [])
+                    for i, nt in enumerate(new_tasks):
+                        nt["id"] = f"task_{now_ms}_{i}"
+                        nt["status"] = "active"
+                        existing_tasks.append(nt)
+                    
+                    with open(file_path, "w", encoding="utf-8") as f:
+                        json.dump(existing_tasks, f, ensure_ascii=False, indent=2)
+                    return {"reply": explanation}
                 
-                with open(file_path, "w", encoding="utf-8") as f:
-                    json.dump(existing_tasks, f, ensure_ascii=False, indent=2)
-                return {"reply": f"Đã tách/tạo thành công {len(new_tasks)} task mới ở Tab 1. Bạn hãy làm mới nội dung để xem."}
+                else:
+                    # CHẾ ĐỘ 1: Full tasks mode inside wrapper dict
+                    updated_tasks = parsed.get("updated_tasks", [])
+                    if not updated_tasks and "mode" in parsed:
+                        # Fallback nếu AI trả về key khác hoặc rỗng
+                        updated_tasks = parsed.get("tasks", [])
+                    
+                    with open(file_path, "w", encoding="utf-8") as f:
+                        json.dump(updated_tasks, f, ensure_ascii=False, indent=2)
+                    return {"reply": explanation}
             
             elif isinstance(parsed, list):
-                # CHẾ ĐỘ 1: Full array mode - AI trả về toàn bộ mảng
+                # Fallback nếu AI trả về mảng trực tiếp thay vì wrapper
                 with open(file_path, "w", encoding="utf-8") as f:
                     json.dump(parsed, f, ensure_ascii=False, indent=2)
-                return {"reply": "Đã cập nhật xong danh sách ở Tab 1. Bạn hãy làm mới nội dung để xem."}
+                return {"reply": explanation}
             
             else:
                 print(f"AI trả về kiểu dữ liệu không mong đợi: {type(parsed)}")
