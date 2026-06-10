@@ -774,7 +774,7 @@ def apply_update_endpoint():
                 args_str = " ".join([f'"{a}"' for a in sys.argv[1:]])
                 
                 if os.name == 'nt':
-                    cmd = f'timeout /t 2 & start "" "{exe_path}" {args_str}'
+                    cmd = f'ping 127.0.0.1 -n 3 > nul & start "" "{exe_path}" {args_str}'
                     subprocess.Popen(cmd, shell=True)
                 else:
                     os.execv(exe_path, [exe_path] + sys.argv)
