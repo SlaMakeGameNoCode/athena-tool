@@ -1,5 +1,5 @@
 {
-  "version": "1.0.2",
+  "version": "1.0.3",
   "released_at": "2026-06-10",
-  "changelog": "Phiên bản thứ ba hỗ trợ tự cập nhật qua GitHub , fix bug auto update"
+  "changelog": "Phiên bản v1.0.3 hỗ trợ tự cập nhật qua GitHub, sửa lỗi restart trên Windows"
 }
