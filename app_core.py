@@ -767,8 +767,18 @@ def apply_update_endpoint():
             # Schedule restart sau 2 giây
             def do_restart():
                 import time
+                import subprocess
                 time.sleep(2)
-                os.execv(sys.executable, [sys.executable] + sys.argv)
+                
+                exe_path = sys.executable
+                args_str = " ".join([f'"{a}"' for a in sys.argv[1:]])
+                
+                if os.name == 'nt':
+                    cmd = f'timeout /t 2 & start "" "{exe_path}" {args_str}'
+                    subprocess.Popen(cmd, shell=True)
+                else:
+                    os.execv(exe_path, [exe_path] + sys.argv)
+                os._exit(0)
             threading.Thread(target=do_restart, daemon=True).start()
         return result
     except Exception as e:
