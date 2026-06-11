@@ -1,5 +1,5 @@
 {
-  "version": "1.0.10",
+  "version": "1.0.11",
   "released_at": "2026-06-11",
-  "changelog": "Khắc phục hoàn toàn lỗi tự động khởi động lại App sau khi cập nhật trên Windows bằng cách chỉ định rõ đường dẫn tương đối"
+  "changelog": "Khắc phục hoàn toàn lỗi lệch index khi chỉnh sửa task bằng AI chat bằng cách đồng bộ hóa danh sách task gửi đi với UI (sử dụng get_current_day_tasks)"
 }

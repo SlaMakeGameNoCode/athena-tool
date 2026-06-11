@@ -9,7 +9,7 @@ import os
 import sys
 import json
 
-APP_VERSION = "1.0.10"
+APP_VERSION = "1.0.11"
 
 app = FastAPI(title="Athena Assistant App")
 
@@ -99,9 +99,9 @@ def scan_projects():
 
 def get_current_day_tasks():
     import time
-    from datetime import datetime
-    local_tz = datetime.now().astimezone().tzinfo
-    today_midnight = datetime.now(local_tz).replace(hour=0, minute=0, second=0, microsecond=0)
+    from datetime import datetime, time as datetime_time
+    today = datetime.now().date()
+    today_midnight = datetime.combine(today, datetime_time.min)
     today_midnight_ms = int(today_midnight.timestamp() * 1000)
 
     saved_tasks_file = os.path.join(BASE_DIR, "saved_raw_tasks.json")
@@ -152,11 +152,11 @@ def run_tonghop(force: bool = False):
         raise HTTPException(status_code=409, detail="Tiến trình tổng hợp đang chạy, vui lòng đợi.")
     try:
         import time
-        from datetime import datetime, timezone
+        from datetime import datetime, time as datetime_time
         
-        local_tz = datetime.now().astimezone().tzinfo
         now_ms = int(time.time() * 1000)
-        today_midnight = datetime.now(local_tz).replace(hour=0, minute=0, second=0, microsecond=0)
+        today = datetime.now().date()
+        today_midnight = datetime.combine(today, datetime_time.min)
         today_midnight_ms = int(today_midnight.timestamp() * 1000)
         
         last_sync_ms = today_midnight_ms
@@ -461,12 +461,7 @@ def run_taoviec():
     provider = config.get("ai_provider", "gemini")
     api_key = config.get("ai_key", "")
     
-    raw_path = os.path.join(BASE_DIR, "saved_raw_tasks.json")
-    if not os.path.exists(raw_path):
-        raise HTTPException(status_code=400, detail="Không tìm thấy saved_raw_tasks.json. Hãy Tổng hợp trước.")
-        
-    with open(raw_path, "r", encoding="utf-8") as f:
-        raw_data = json.load(f)
+    raw_data = get_current_day_tasks()
         
     tasks_to_process = [t for t in raw_data if t.get("status") != "hide"]
             
@@ -777,10 +772,7 @@ def ai_chat(req: ChatRequest):
             file_path = os.path.join(BASE_DIR, "saved_raw_tasks.json")
             if not os.path.exists(file_path):
                 return {"reply": "Chưa có file saved_raw_tasks.json để sửa. Hãy Tổng hợp trước."}
-            with open(file_path, "r", encoding="utf-8") as f:
-                content = f.read()
-                
-            all_tasks = json.loads(content)
+            all_tasks = get_current_day_tasks()
             
             # Separate visible tasks (active & match filter) vs other tasks (hidden or other platforms)
             raw_filter = req.raw_filter.lower()
@@ -799,8 +791,24 @@ def ai_chat(req: ChatRequest):
             if not visible_tasks:
                 return {"reply": "Không tìm thấy công việc thô nào hiển thị khớp với bộ lọc để gửi cho AI."}
                 
-            # Send only visible tasks
+            # Create ID mapping to prevent LLM confusion on IDs like task_..._10
+            # Map simple IDs (str index) <-> original task IDs
+            id_map_to_orig = {}
+            id_map_to_simple = {}
+            for idx, t in enumerate(visible_tasks):
+                simple_id = str(idx + 1)
+                orig_id = t["id"]
+                id_map_to_orig[simple_id] = orig_id
+                id_map_to_simple[orig_id] = simple_id
+                t["id"] = simple_id # Temporarily set simple ID
+                
+            # Send only visible tasks with simple sequential IDs
             visible_content_str = json.dumps(visible_tasks, ensure_ascii=False, indent=2)
+            
+            # Restore original IDs in visible_tasks array in Python memory immediately
+            for idx, t in enumerate(visible_tasks):
+                t["id"] = id_map_to_orig[str(idx + 1)]
+                
             new_content = edit_raw_tasks_with_ai(visible_content_str, req.message, provider, api_key)
             
             # Thử parse JSON
@@ -825,7 +833,10 @@ def ai_chat(req: ChatRequest):
                 
                 if mode == "patch" or "new_tasks" in parsed:
                     # CHẾ ĐỘ 2: Patch mode
-                    hide_ids = parsed.get("hide_ids", [])
+                    # Convert simple hide_ids back to original IDs
+                    hide_simple_ids = parsed.get("hide_ids", [])
+                    hide_ids = [id_map_to_orig[sid] for sid in hide_simple_ids if sid in id_map_to_orig]
+                    
                     # Hide selected visible tasks
                     for t in visible_tasks:
                         if t.get("id") in hide_ids:
@@ -850,6 +861,12 @@ def ai_chat(req: ChatRequest):
                     if not updated_tasks and "mode" in parsed:
                         updated_tasks = parsed.get("tasks", [])
                         
+                    # Map simple IDs of updated_tasks back to original IDs
+                    for ut in updated_tasks:
+                        simple_id = ut.get("id")
+                        if simple_id in id_map_to_orig:
+                            ut["id"] = id_map_to_orig[simple_id]
+                            
                     # Merge updated tasks by ID mapping
                     updated_by_id = {t["id"]: t for t in updated_tasks if "id" in t}
                     visible_ids = {t["id"] for t in visible_tasks if "id" in t}
@@ -857,7 +874,7 @@ def ai_chat(req: ChatRequest):
                     final_tasks = []
                     new_added_tasks = []
                     
-                    # Handle new tasks added in updated_tasks that don't have IDs
+                    # Handle new tasks added in updated_tasks that don't have original IDs
                     for ut in updated_tasks:
                         ut_id = ut.get("id")
                         if not ut_id or ut_id not in visible_ids:
@@ -887,6 +904,13 @@ def ai_chat(req: ChatRequest):
             elif isinstance(parsed, list):
                 # Fallback nếu AI trả về mảng trực tiếp thay vì wrapper (Chế độ 1)
                 updated_tasks = parsed
+                
+                # Map simple IDs of updated_tasks back to original IDs
+                for ut in updated_tasks:
+                    simple_id = ut.get("id")
+                    if simple_id in id_map_to_orig:
+                        ut["id"] = id_map_to_orig[simple_id]
+                        
                 updated_by_id = {t["id"]: t for t in updated_tasks if "id" in t}
                 visible_ids = {t["id"] for t in visible_tasks if "id" in t}
                 
