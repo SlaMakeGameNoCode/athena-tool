@@ -1,5 +1,5 @@
 {
-  "version": "1.0.16",
+  "version": "1.0.17",
   "released_at": "2026-06-12",
-  "changelog": "Khắc phục triệt để lỗi UnicodeDecodeError khi quét Git trên Windows bằng cách đọc output dưới dạng bytes và giải mã bằng bảng mã UTF-8 (bỏ qua ký tự lỗi)."
+  "changelog": "Sửa lỗi không xóa cấu hình trong file .env khi ngắt kết nối nền tảng chat ở UI Setup, và xóa sạch cache thô chat_raw.json trước mỗi lần đồng bộ để tránh hiển thị tin nhắn cũ."
 }

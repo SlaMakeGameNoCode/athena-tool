@@ -9,7 +9,7 @@ import os
 import sys
 import json
 
-APP_VERSION = "1.0.16"
+APP_VERSION = "1.0.17"
 
 app = FastAPI(title="Athena Assistant App")
 
@@ -186,6 +186,21 @@ def run_tonghop(force: bool = False):
         # Update last_sync.txt with current time BEFORE fetching so we don't miss incoming messages while fetching
         with open(sync_file, "w") as f:
             f.write(str(now_ms))
+
+        # Clear/initialize raw files to avoid reading stale cache if sync is skipped or fails
+        raw_path = os.path.join(BASE_DIR, "chat_raw.json")
+        git_path = os.path.join(BASE_DIR, "git_raw.json")
+        try:
+            with open(raw_path, "w", encoding="utf-8") as f:
+                json.dump([], f)
+        except Exception as e:
+            print("Lỗi khởi tạo chat_raw.json:", e)
+            
+        try:
+            with open(git_path, "w", encoding="utf-8") as f:
+                json.dump([], f)
+        except Exception as e:
+            print("Lỗi khởi tạo git_raw.json:", e)
 
         import sync_rocket
         sync_rocket.main(last_sync_ms)
@@ -386,6 +401,19 @@ def save_setup(data: dict):
         env_data["WORKAI_USERNAME"] = data["workai_user"]
     if "workai_pass" in data:
         env_data["WORKAI_PASSWORD"] = data["workai_pass"]
+        
+    # Clear credentials for inactive platforms
+    active_types = {p.get("type") for p in platforms if p.get("type")}
+    platform_keys = {
+        "rocket": ["ROCKET_SERVER_URL", "ROCKET_USER_ID", "ROCKET_AUTH_TOKEN"],
+        "email": ["EMAIL_IMAP_SERVER", "EMAIL_USER", "EMAIL_PASS"],
+        "slack": ["SLACK_BOT_TOKEN"],
+        "telegram": ["TELEGRAM_CHAT_ID", "TELEGRAM_BOT_TOKEN"]
+    }
+    for p_type, keys in platform_keys.items():
+        if p_type not in active_types:
+            for key in keys:
+                env_data.pop(key, None)
         
     for p in platforms:
         if p.get("type") == "rocket":
