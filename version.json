@@ -1,5 +1,5 @@
 {
-  "version": "1.0.14",
+  "version": "1.0.15",
   "released_at": "2026-06-12",
-  "changelog": "Khắc phục triệt để lỗi tự tắt app khi cập nhật trên Windows với thư mục có khoảng trắng bằng cách bảo vệ dấu nháy kép ngoài cùng trong lệnh CMD (lập cú pháp cmd.exe /c chuẩn)."
+  "changelog": "Khắc phục lỗi bỏ sót commit khi quét Git bằng cách sử dụng định dạng ISO 8601 có múi giờ (timezone-aware) cho đối số --since trong lệnh git log."
 }

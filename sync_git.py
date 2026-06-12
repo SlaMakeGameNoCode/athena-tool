@@ -32,8 +32,14 @@ def main(last_sync_ms=None):
         
     # Calculate since_str
     if last_sync_ms:
-        start_dt = datetime.fromtimestamp(last_sync_ms / 1000.0)
-        since_str = start_dt.strftime('%Y-%m-%dT%H:%M:%S')
+        from datetime import timezone, timedelta
+        # Chuyển đổi timestamp sang timezone-aware datetime ở múi giờ Việt Nam (UTC+7)
+        tz_vn = timezone(timedelta(hours=7))
+        start_dt = datetime.fromtimestamp(last_sync_ms / 1000.0, tz=tz_vn)
+        # Định dạng ISO 8601 có timezone (ví dụ: 2026-06-12T00:00:00+07:00)
+        since_str = start_dt.strftime('%Y-%m-%dT%H:%M:%S%z')
+        if len(since_str) >= 5 and (since_str[-5] == '+' or since_str[-5] == '-'):
+            since_str = since_str[:-2] + ':' + since_str[-2:]
     else:
         since_str = "midnight"
 
