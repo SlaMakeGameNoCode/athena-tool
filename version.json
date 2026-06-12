@@ -1,5 +1,5 @@
 {
-  "version": "1.0.13",
+  "version": "1.0.14",
   "released_at": "2026-06-12",
-  "changelog": "Khắc phục triệt để lỗi không tự động khởi động lại App sau khi cập nhật trên Windows bằng cách tạo tiến trình con độc lập (DETACHED_PROCESS) và sử dụng đường dẫn tuyệt đối bao dấu nháy kép."
+  "changelog": "Khắc phục triệt để lỗi tự tắt app khi cập nhật trên Windows với thư mục có khoảng trắng bằng cách bảo vệ dấu nháy kép ngoài cùng trong lệnh CMD (lập cú pháp cmd.exe /c chuẩn)."
 }
