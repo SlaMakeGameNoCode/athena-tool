@@ -56,11 +56,12 @@ def main(last_sync_ms=None):
             # Chạy lệnh git log
             cmd = ['git', 'log', f'--author={author}', f'--since={since_str}', '--pretty=format:%s']
             
-            result = subprocess.run(cmd, cwd=folder_path, capture_output=True, text=True, check=False)
+            result = subprocess.run(cmd, cwd=folder_path, capture_output=True, check=False)
             
             if result.returncode == 0 and result.stdout:
+                stdout_str = result.stdout.decode('utf-8', errors='ignore')
                 # Tách từng dòng commit
-                commits = [line.strip() for line in result.stdout.split('\n') if line.strip()]
+                commits = [line.strip() for line in stdout_str.split('\n') if line.strip()]
                 
                 if commits:
                     room_name = f"Git - {os.path.basename(folder_path)}"

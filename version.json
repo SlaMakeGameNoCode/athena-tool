@@ -1,5 +1,5 @@
 {
-  "version": "1.0.15",
+  "version": "1.0.16",
   "released_at": "2026-06-12",
-  "changelog": "Khắc phục lỗi bỏ sót commit khi quét Git bằng cách sử dụng định dạng ISO 8601 có múi giờ (timezone-aware) cho đối số --since trong lệnh git log."
+  "changelog": "Khắc phục triệt để lỗi UnicodeDecodeError khi quét Git trên Windows bằng cách đọc output dưới dạng bytes và giải mã bằng bảng mã UTF-8 (bỏ qua ký tự lỗi)."
 }
