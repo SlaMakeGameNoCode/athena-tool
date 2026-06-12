@@ -9,7 +9,7 @@ import os
 import sys
 import json
 
-APP_VERSION = "1.0.12"
+APP_VERSION = "1.0.13"
 
 app = FastAPI(title="Athena Assistant App")
 
@@ -1024,9 +1024,10 @@ def apply_update_endpoint():
                 args_str = " ".join([f'"{a}"' for a in sys.argv[1:]])
                 
                 if os.name == 'nt':
-                    exe_name = os.path.basename(exe_path)
-                    cmd = f'ping 127.0.0.1 -n 3 > nul & start "" ".\\{exe_name}" {args_str}'
-                    subprocess.Popen(cmd, shell=True, cwd=BASE_DIR)
+                    DETACHED_PROCESS = 0x00000008
+                    CREATE_NEW_PROCESS_GROUP = 0x00000200
+                    cmd = f'ping 127.0.0.1 -n 3 > nul & start "" "{exe_path}" {args_str}'
+                    subprocess.Popen(cmd, shell=True, cwd=BASE_DIR, creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
                 else:
                     os.execv(exe_path, [exe_path] + sys.argv)
                 os._exit(0)
