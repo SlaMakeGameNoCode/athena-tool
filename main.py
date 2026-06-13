@@ -15,11 +15,16 @@ else:
 # Add RUNNING_DIR to the top of sys.path so that disk versions of modules are imported first
 sys.path.insert(0, RUNNING_DIR)
 
-# Handle the submitter subprocess call if it was invoked via PyInstaller exe
-if len(sys.argv) > 1 and sys.argv[1] == "submitter.py":
-    import submitter
-    submitter.main()
-    sys.exit(0)
+# Handle the submitter and preview_helper subprocess calls if they were invoked via PyInstaller exe
+if len(sys.argv) > 1:
+    if sys.argv[1] == "submitter.py":
+        import submitter
+        submitter.main()
+        sys.exit(0)
+    elif sys.argv[1] == "preview_helper.py":
+        import preview_helper
+        preview_helper.main()
+        sys.exit(0)
 
 # Import và chạy app chính
 import app_core

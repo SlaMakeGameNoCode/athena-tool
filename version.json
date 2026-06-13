@@ -1,5 +1,5 @@
 {
-  "version": "1.0.28",
+  "version": "1.0.29",
   "released_at": "2026-06-13",
-  "changelog": "Sửa lỗi cào KPI trả về 0 kết quả bằng cách thiết lập luồng cào tuần tự: mở rộng từng dòng lỗi và trích xuất thông tin chi tiết ngay lập tức để tránh hiện tượng accordion tự động ẩn dòng khi mở rộng hàng mới."
+  "changelog": "Khắc phục triệt để lỗi sập nguồn (reset/taskkill) khi cập nhật KPI bằng cách thêm logic đánh chặn cho preview_helper.py trong main.py; đồng thời sửa lỗi ModuleNotFoundError của greenlet bằng cách khai báo hiddenimport trong main.spec."
 }
