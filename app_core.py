@@ -9,7 +9,7 @@ import os
 import sys
 import json
 
-APP_VERSION = "1.0.23"
+APP_VERSION = "1.0.24"
 
 app = FastAPI(title="Athena Assistant App")
 
@@ -477,6 +477,18 @@ def get_kpi_content():
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
     return {"status": "success", "tasks": []}
+
+@app.get("/api/kpi/status")
+def get_kpi_status():
+    log_file = os.path.join(BASE_DIR, "kpi_scan.log")
+    if os.path.exists(log_file):
+        try:
+            with open(log_file, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+            return {"status": "running", "logs": [l.strip() for l in lines if l.strip()]}
+        except Exception as e:
+            return {"status": "error", "logs": [f"Lỗi đọc log: {e}"]}
+    return {"status": "idle", "logs": []}
 
 def load_config():
     if os.path.exists(CONFIG_FILE):

@@ -1,5 +1,5 @@
 {
-  "version": "1.0.23",
+  "version": "1.0.24",
   "released_at": "2026-06-13",
-  "changelog": "Sửa đường dẫn truy cập trang KPI cá nhân thành `/kpi/user` (thay vì `/kpis`) để đảm bảo quét đúng các đầu việc chưa đạt chuẩn của người dùng đăng nhập."
+  "changelog": "Cải tiến quét KPI: Hỗ trợ hiển thị nhật ký cào trực tiếp trên giao diện UI, tự động tối ưu hóa bộ cào chi tiết lỗi để hỗ trợ tất cả các issue lỗi của người dùng (kể cả tự tạo tay không qua tool)."
 }

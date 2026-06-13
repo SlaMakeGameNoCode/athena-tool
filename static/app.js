@@ -510,10 +510,45 @@ document.addEventListener('DOMContentLoaded', () => {
         if(kpiTab) kpiTab.classList.add('active');
         document.getElementById('tab-suakpi').classList.add('active');
 
-        document.getElementById('kpi-tasks-container').innerHTML = '<div class="empty-state">Đang chạy trình duyệt cào dữ liệu KPI và gửi cho AI... Vui lòng đợi (khoảng 30s)</div>';
+        const container = document.getElementById('kpi-tasks-container');
+        container.innerHTML = `
+            <div class="empty-state">
+                <div style="margin-bottom: 15px; font-weight: bold;">Đang chạy trình duyệt cào dữ liệu KPI và gửi cho AI... Vui lòng đợi (khoảng 30s)</div>
+                <div id="kpi-scan-log-display" style="text-align: left; font-family: monospace; background: rgba(15, 23, 42, 0.6); padding: 15px; border-radius: 8px; font-size: 0.85em; max-height: 250px; overflow-y: auto; border: 1px solid var(--panel-border); color: #38bdf8; line-height: 1.5;">
+                    Chờ khởi động tiến trình...
+                </div>
+            </div>
+        `;
+
+        // Bắt đầu thăm dò log
+        let isPolling = true;
+        const pollLogs = async () => {
+            if (!isPolling) return;
+            try {
+                const statusRes = await fetch('/api/kpi/status');
+                if (statusRes.ok && isPolling) {
+                    const statusData = await statusRes.json();
+                    const logDisplay = document.getElementById('kpi-scan-log-display');
+                    if (logDisplay && statusData.logs && statusData.logs.length > 0) {
+                        logDisplay.innerHTML = statusData.logs
+                            .map(line => `<div>${escapeHtml(line)}</div>`)
+                            .join('');
+                        // Tự động cuộn xuống cuối
+                        logDisplay.scrollTop = logDisplay.scrollHeight;
+                    }
+                }
+            } catch (err) {
+                console.error("Lỗi thăm dò trạng thái quét KPI:", err);
+            }
+            if (isPolling) {
+                setTimeout(pollLogs, 1000);
+            }
+        };
+        setTimeout(pollLogs, 1000);
 
         try {
             const res = await fetch('/api/kpi/scan_and_fix', { method: 'POST' });
+            isPolling = false; // Dừng poll log
             if(res.ok) {
                 const data = await res.json();
                 kpiTasks = data.tasks;
@@ -521,11 +556,12 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 const err = await res.json();
                 alert("Lỗi: " + err.detail);
-                document.getElementById('kpi-tasks-container').innerHTML = `<div class="empty-state" style="color:var(--danger)">Lỗi: ${err.detail}</div>`;
+                container.innerHTML = `<div class="empty-state" style="color:var(--danger)">Lỗi: ${err.detail}</div>`;
             }
         } catch(e) {
+            isPolling = false; // Dừng poll log
             alert("Lỗi kết nối.");
-            document.getElementById('kpi-tasks-container').innerHTML = `<div class="empty-state" style="color:var(--danger)">Lỗi kết nối.</div>`;
+            container.innerHTML = `<div class="empty-state" style="color:var(--danger)">Lỗi kết nối.</div>`;
         }
         btn.textContent = "4. Sửa KPI";
     });
