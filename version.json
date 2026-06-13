@@ -1,5 +1,5 @@
 {
-  "version": "1.0.24",
+  "version": "1.0.25",
   "released_at": "2026-06-13",
-  "changelog": "Cải tiến quét KPI: Hỗ trợ hiển thị nhật ký cào trực tiếp trên giao diện UI, tự động tối ưu hóa bộ cào chi tiết lỗi để hỗ trợ tất cả các issue lỗi của người dùng (kể cả tự tạo tay không qua tool)."
+  "changelog": "Sửa lỗi cào nhầm container tổng thể làm gộp các đầu việc KPI thành một: Sử dụng giải thuật JS DOM traversal thông minh để xác định chính xác thẻ hàng (row container) cho từng đầu việc."
 }
