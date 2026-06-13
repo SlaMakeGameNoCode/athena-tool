@@ -1,5 +1,5 @@
 {
-  "version": "1.0.27",
+  "version": "1.0.28",
   "released_at": "2026-06-13",
-  "changelog": "Triển khai tính năng tự động cập nhật sửa đổi tiêu đề KPI chưa đạt chuẩn lên WorkAI thông qua Playwright, bảo toàn mô tả và tiêu chí nghiệm thu hiện tại."
+  "changelog": "Sửa lỗi cào KPI trả về 0 kết quả bằng cách thiết lập luồng cào tuần tự: mở rộng từng dòng lỗi và trích xuất thông tin chi tiết ngay lập tức để tránh hiện tượng accordion tự động ẩn dòng khi mở rộng hàng mới."
 }

@@ -144,160 +144,142 @@ def scan_workai_kpis(username, password):
                 r"^\s*(Không đạt|Chưa đạt|Chưa đạt chuẩn|Không đạt chuẩn|Chưa chuẩn|Không chuẩn|Lỗi tiêu đề|Cảnh báo|Không đạt yêu cầu|Chưa đạt yêu cầu)\s*$", 
                 re.IGNORECASE
             )
-            failed_badges = page.get_by_text(failed_pattern).all()
+            # Lọc các badge nằm trong thẻ TR (bảng issue) để loại bỏ card tổng quan ở đầu trang
+            badge_locator = page.locator('tr').get_by_text(failed_pattern)
+            total_failed = badge_locator.count()
+            log_kpi(f"Tìm thấy {total_failed} nhãn trạng thái chưa đạt chuẩn trong bảng công việc.")
             
-            log_kpi(f"Tìm thấy {len(failed_badges)} nhãn trạng thái chưa đạt chuẩn.")
-            if not failed_badges:
+            if total_failed == 0:
                 log_kpi("Không có đầu việc nào bị đánh giá chưa đạt chuẩn trên trang này.")
                 return []
                 
-            # Duyệt qua từng badge/nút trạng thái lỗi để mở rộng thông tin chi tiết
-            for idx, badge in enumerate(failed_badges):
-                # Sử dụng JavaScript để tìm chính xác phần tử hàng (row container) chứa badge này
-                # Đảm bảo hàng chứa JIRA key và có chiều dài text hợp lý
-                try:
-                    row_id = badge.evaluate("""badge => {
-                        let current = badge;
-                        while (current && current !== document.body) {
-                            const text = current.innerText || "";
-                            const hasJiraKey = /[A-Z0-9]+-\\d+/.test(text);
-                            
-                            const isRowLike = current.tagName === 'TR' || 
-                                              current.getAttribute('role') === 'row' || 
-                                              current.classList.contains('border-b') ||
-                                              current.classList.contains('border') ||
-                                              (current.tagName === 'DIV' && text.length < 800);
-                                              
-                            if (isRowLike && hasJiraKey && text.length < 800) {
-                                const badgeText = badge.innerText || "";
-                                if (text.length > badgeText.length + 5) {
-                                    const tempId = 'kpi-row-' + Math.random().toString(36).substr(2, 9);
-                                    current.classList.add(tempId);
-                                    return tempId;
-                                }
-                            }
-                            current = current.parentElement;
-                        }
-                        return null; // Không tìm thấy hàng hợp lệ chứa JIRA key
-                    }""")
-                    
-                    if not row_id:
-                        log_kpi(f"[{idx+1}/{len(failed_badges)}] Bỏ qua phần tử không thuộc hàng JIRA (có thể là card tổng quan).")
-                        continue
-                        
-                    row = page.locator(f".{row_id}")
-                except Exception as eval_err:
-                    log_kpi(f"Lỗi khi tìm hàng bằng JS: {eval_err}. Dùng fallback xpath...")
-                    row = badge.locator("xpath=./ancestor::div[contains(@class, 'flex') or contains(@class, 'grid') or @role='row']").first
-                
-                if row.count() == 0:
-                    continue
-                
-                # Tránh click trùng lặp một hàng nhiều lần (làm nó đóng lại)
-                try:
-                    is_expanded = row.evaluate("el => el.getAttribute('data-expanded-by-tool') === 'true'")
-                    if is_expanded:
-                        continue
-                except:
-                    pass
-                
-                # Lấy tiêu đề sơ bộ để ghi log
-                row_text_preview = ""
-                try:
-                    row_text_preview = row.inner_text().split("\n")[0][:40]
-                except:
-                    pass
-                
-                log_kpi(f"[{idx+1}/{len(failed_badges)}] Đang mở rộng chi tiết hàng: '{row_text_preview}...'")
-                
-                # Expand row bằng cách click vào vùng row hoặc nút chevron
-                chevron = row.locator("svg").first
-                if chevron.count() > 0:
-                    try:
-                        chevron.click()
-                    except:
-                        try:
-                            badge.click()
-                        except:
-                            pass
-                else:
-                    try:
-                        badge.click()
-                    except:
-                        pass
-                
-                try:
-                    row.evaluate("el => el.setAttribute('data-expanded-by-tool', 'true')")
-                except:
-                    pass
-                
-                page.wait_for_timeout(500) # Đợi animation mở rộng
-                
-            log_kpi("Đang trích xuất nội dung chi tiết lỗi của các việc đã mở rộng...")
-            
-            # Cào trực tiếp thông tin từ các hàng đã đánh dấu mở rộng
-            all_rows = page.locator("[data-expanded-by-tool='true']").all()
             seen_kpi_tasks = set()
             
-            log_kpi(f"Tìm thấy {len(all_rows)} hàng đang mở rộng thành công. Bắt đầu phân tích text...")
-            for idx, parent_row in enumerate(all_rows):
-                full_parent_text = parent_row.inner_text()
-                lines = [l.strip() for l in full_parent_text.split('\n') if l.strip()]
-                
-                if len(lines) < 2:
-                    continue
-                
-                # Xác định JIRA key và title
-                title = "Unknown Task"
-                if lines[0].startswith("G") or "-" in lines[0]:
-                    title = f"{lines[0]} - {lines[1]}"
-                else:
-                    title = lines[0]
-                
-                log_kpi(f"Phân tích hàng {idx+1}: {title}")
-                
-                # Tìm vị trí nhãn trạng thái chưa đạt
-                status_idx = -1
-                for i, line in enumerate(lines):
-                    if failed_pattern.match(line) or any(s in line.lower() for s in ["không đạt", "chưa đạt", "đạt chuẩn"]):
-                        status_idx = i
-                        break
-                
-                reason = "Không tìm thấy lý do cụ thể"
-                suggestion = ""
-                
-                if status_idx != -1 and status_idx < len(lines) - 1:
-                    detail_text = "\n".join(lines[status_idx + 1:])
-                    # Tách lý do và gợi ý bằng regex
-                    reason_match = re.search(r'(?:Summary|Lý do(?: chưa đạt)?|Lý do chính|Nội dung đánh giá):\s*(.*?)(?=\n(?:Gợi ý|Suggestion|Sửa Summary):|$)', detail_text, re.DOTALL | re.IGNORECASE)
-                    suggestion_match = re.search(r'(?:Gợi ý|Suggestion|Sửa Summary):\s*(.*?)$', detail_text, re.DOTALL | re.IGNORECASE)
+            # Duyệt qua từng hàng lỗi theo index để tránh stale element reference khi DOM thay đổi
+            for idx in range(total_failed):
+                try:
+                    badge = badge_locator.nth(idx)
                     
-                    if reason_match:
-                        reason = reason_match.group(1).strip()
-                    else:
-                        # Nếu không có nhãn chỉ định, lấy toàn bộ phần detail_text làm lý do
-                        reason = detail_text.strip()
+                    # Lấy thông tin hiển thị trước khi click và thêm class định danh tạm thời
+                    row_info = badge.evaluate("""badge => {
+                        let cur = badge;
+                        while (cur && cur !== document.body) {
+                            if (cur.tagName === 'TR') {
+                                const tempId = 'kpi-row-' + Math.random().toString(36).substr(2, 9);
+                                cur.classList.add(tempId);
+                                return {
+                                    tempId: tempId,
+                                    text_preview: cur.innerText.split('\\n')[0].replace(/\\t/g, ' ').trim()
+                                };
+                            }
+                            cur = cur.parentElement;
+                        }
+                        return null;
+                    }""")
+                    
+                    if not row_info:
+                        continue
                         
-                    if suggestion_match:
-                        suggestion = suggestion_match.group(1).strip()
-                else:
-                    log_kpi(f"Cảnh báo: Không tìm thấy dòng chi tiết lỗi cho {title}")
-                
-                # Tránh trùng lặp đầu việc đã quét
-                task_fingerprint = (title.strip(), reason.strip())
-                if task_fingerprint in seen_kpi_tasks:
-                    continue
-                seen_kpi_tasks.add(task_fingerprint)
-                
-                kpi_tasks.append({
-                    "title": title,
-                    "reason": reason,
-                    "suggestion": suggestion
-                })
-                log_kpi(f"-> Đã ghi nhận: {title} | Lý do: {reason[:60]}...")
-            
+                    temp_class = row_info["tempId"]
+                    row_text_preview = row_info["text_preview"]
+                    row_locator = page.locator(f".{temp_class}")
+                    
+                    log_kpi(f"[{idx+1}/{total_failed}] Đang mở rộng chi tiết hàng: '{row_text_preview}'")
+                    
+                    # Mở rộng hàng bằng cách click chevron (nút svg đầu tiên) hoặc click badge
+                    chevron = row_locator.locator("svg").first
+                    if chevron.count() > 0:
+                        chevron.click()
+                    else:
+                        badge.click()
+                        
+                    # Đợi animation mở rộng (800ms)
+                    page.wait_for_timeout(800)
+                    
+                    # Cào thông tin chi tiết bằng JS ngay lập tức từ dòng detail-row vừa được hiển thị
+                    parsed_task = badge.evaluate("""badge => {
+                        let cur = badge;
+                        let row = null;
+                        while (cur && cur !== document.body) {
+                            if (cur.tagName === 'TR') {
+                                row = cur;
+                                break;
+                            }
+                            cur = cur.parentElement;
+                        }
+                        if (!row) return null;
+                        
+                        let jiraKey = "";
+                        let mainTitle = "";
+                        const jiraLink = row.querySelector('a[href*="/issues/"]');
+                        if (jiraLink) {
+                            jiraKey = jiraLink.innerText.trim();
+                        }
+                        
+                        const titleCell = row.querySelector('td.max-w-\\\\[300px\\\\], td.truncate');
+                        if (titleCell) {
+                            mainTitle = titleCell.innerText.trim();
+                        } else {
+                            const cells = Array.from(row.querySelectorAll('td'));
+                            if (cells.length >= 3) {
+                                mainTitle = cells[2].innerText.trim();
+                            }
+                        }
+                        
+                        if (!jiraKey) {
+                            const match = row.innerText.match(/([A-Z0-9]+-\\d+)/);
+                            if (match) jiraKey = match[1];
+                        }
+                        
+                        const nextRow = row.nextElementSibling;
+                        let reason = "";
+                        let suggestion = "";
+                        
+                        if (nextRow) {
+                            const paragraphs = Array.from(nextRow.querySelectorAll('p'));
+                            for (let p of paragraphs) {
+                                const text = p.innerText.trim();
+                                if (text.startsWith("Summary:") || text.includes("Lý do:")) {
+                                    reason = text.replace(/^(Summary:|Lý do:)/i, '').trim();
+                                } else if (text.startsWith("Gợi ý:") || text.includes("Suggestion:")) {
+                                    suggestion = text.replace(/^(Gợi ý:|Suggestion:)/i, '').trim();
+                                }
+                            }
+                        }
+                        
+                        return {
+                            jiraKey: jiraKey,
+                            mainTitle: mainTitle,
+                            reason: reason,
+                            suggestion: suggestion
+                        };
+                    }""")
+                    
+                    if parsed_task and parsed_task.get("jiraKey"):
+                        jira_key = parsed_task["jiraKey"]
+                        main_title = parsed_task["mainTitle"]
+                        reason = parsed_task["reason"] or "Không tìm thấy lý do cụ thể"
+                        suggestion = parsed_task["suggestion"]
+                        
+                        full_title = f"{jira_key} - {main_title}"
+                        task_fingerprint = (full_title.strip(), reason.strip())
+                        
+                        if task_fingerprint not in seen_kpi_tasks:
+                            seen_kpi_tasks.add(task_fingerprint)
+                            kpi_tasks.append({
+                                "title": full_title,
+                                "reason": reason,
+                                "suggestion": suggestion
+                            })
+                            log_kpi(f"   ✓ Đã ghi nhận: {full_title} | Lý do: {reason[:60]}...")
+                    else:
+                        log_kpi(f"   ⚠ Lỗi: Không trích xuất được thông tin chi tiết hàng {idx+1}")
+                        
+                except Exception as row_err:
+                    log_kpi(f"   ⚠ Lỗi khi xử lý hàng {idx+1}: {row_err}")
+                    
             log_kpi(f"Hoàn thành quét KPI! Tổng số đầu việc bị lỗi thu thập được: {len(kpi_tasks)}")
-                
+            
         except Exception as e:
             log_kpi(f"LỖI quét KPI: {e}")
             try:
