@@ -1,5 +1,5 @@
 {
-  "version": "1.0.21",
+  "version": "1.0.22",
   "released_at": "2026-06-13",
-  "changelog": "Cải thiện tính năng quét KPI: hỗ trợ phát hiện nhiều trạng thái chưa đạt chuẩn khác nhau (Chưa đạt, Chưa đạt chuẩn, Không đạt chuẩn, Lỗi tiêu đề, Cảnh báo, v.v.) và tối ưu hóa thao tác click mở rộng dòng để tránh trùng lặp."
+  "changelog": "Di chuyển vị trí nút 'Làm mới Dự án WorkAI' lên trên đầu thanh công cụ (trên nút '1. Tổng hợp') theo yêu cầu người dùng để thuận tiện thao tác."
 }
