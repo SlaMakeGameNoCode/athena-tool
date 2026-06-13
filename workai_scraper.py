@@ -1,5 +1,6 @@
 import os
 import sys
+import re
 
 # Set browsers path for PyInstaller frozen app or local execution
 if getattr(sys, 'frozen', False):
@@ -111,20 +112,32 @@ def scan_workai_kpis(username, password):
                 else:
                     raise Exception("Không tìm thấy link 'KPIs cá nhân' hoặc 'KPIs' trên sidebar")
             
-            # 4. Tìm tất cả các dòng có trạng thái "Không đạt"
-            # Theo hình ảnh, nút "Không đạt" là một badge/button trong hàng.
-            failed_badges = page.get_by_text("Không đạt").all()
+            # 4. Tìm tất cả các dòng có trạng thái "Không đạt" hoặc các trạng thái không đạt chuẩn khác
+            # Sử dụng regex để khớp chính xác các trạng thái lỗi/cảnh báo phổ biến
+            failed_pattern = re.compile(
+                r"^\s*(Không đạt|Chưa đạt|Chưa đạt chuẩn|Không đạt chuẩn|Chưa chuẩn|Không chuẩn|Lỗi tiêu đề|Cảnh báo|Không đạt yêu cầu|Chưa đạt yêu cầu)\s*$", 
+                re.IGNORECASE
+            )
+            failed_badges = page.get_by_text(failed_pattern).all()
             
-            # Nếu không có "Không đạt", thì kpi hoàn hảo
+            # Nếu không tìm thấy badge không đạt nào, thì kpi hoàn hảo
             if not failed_badges:
                 return []
                 
-            # Duyệt qua từng row không đạt
+            # Duyệt qua từng badge/nút trạng thái lỗi để mở rộng thông tin chi tiết
             for badge in failed_badges:
                 # Tìm element chứa dòng đó (thường là thẻ cha tr/div)
                 row = badge.locator("xpath=./ancestor::div[contains(@class, 'flex') or contains(@class, 'grid') or @role='row']").first
                 if row.count() == 0:
                     continue
+                
+                # Tránh click trùng lặp một hàng nhiều lần (làm nó đóng lại)
+                try:
+                    is_expanded = row.evaluate("el => el.getAttribute('data-expanded-by-tool') === 'true'")
+                    if is_expanded:
+                        continue
+                except:
+                    pass
                 
                 # Expand row bằng cách click vào vùng row hoặc nút chevron
                 # Theo hình thì chevron nằm ngoài cùng bên trái. Có thể click vào chevron hoặc click thẳng vào badge
@@ -143,6 +156,11 @@ def scan_workai_kpis(username, password):
                     except:
                         pass
                 
+                try:
+                    row.evaluate("el => el.setAttribute('data-expanded-by-tool', 'true')")
+                except:
+                    pass
+                
                 page.wait_for_timeout(500) # Đợi animation mở rộng
                 
             # Lấy toàn bộ text của trang sau khi mở rộng
@@ -151,11 +169,11 @@ def scan_workai_kpis(username, password):
             # Ta tìm tất cả các nội dung có chữ "Summary:" và "Gợi ý:"
             
             expanded_panels = page.locator("text=/Summary:.*?/").all()
+            seen_kpi_tasks = set()
             
             for panel in expanded_panels:
                 text_content = panel.inner_text()
                 # Tách lấy phần Lý do (sau chữ Summary:)
-                import re
                 
                 reason_match = re.search(r'Summary:\s*(.*?)(?=\nGợi ý:|$)', text_content, re.DOTALL | re.IGNORECASE)
                 suggestion_match = re.search(r'Gợi ý:\s*(.*?)(?=\nSửa Summary|$)', text_content, re.DOTALL | re.IGNORECASE)
@@ -176,6 +194,12 @@ def scan_workai_kpis(username, password):
                             title = f"{lines[0]} - {lines[1]}"
                         else:
                             title = lines[0]
+                
+                # Tránh trùng lặp đầu việc đã quét
+                task_fingerprint = (title.strip(), reason.strip())
+                if task_fingerprint in seen_kpi_tasks:
+                    continue
+                seen_kpi_tasks.add(task_fingerprint)
                 
                 kpi_tasks.append({
                     "title": title,
