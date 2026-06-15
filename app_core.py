@@ -9,7 +9,7 @@ import os
 import sys
 import json
 
-APP_VERSION = "1.0.29"
+APP_VERSION = "1.0.30"
 
 app = FastAPI(title="Athena Assistant App")
 

@@ -4,7 +4,7 @@ Không chứa logic app, chỉ load từ root folder."""
 import sys
 import os
 
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.30"
 
 if getattr(sys, 'frozen', False):
     RUNNING_DIR = os.path.dirname(sys.executable)
@@ -17,12 +17,15 @@ sys.path.insert(0, RUNNING_DIR)
 
 # Handle the submitter and preview_helper subprocess calls if they were invoked via PyInstaller exe
 if len(sys.argv) > 1:
-    if sys.argv[1] == "submitter.py":
+    first_arg = os.path.basename(sys.argv[1]).lower()
+    if first_arg == "submitter.py":
         import submitter
+        sys.argv = [sys.argv[0]] + sys.argv[2:]
         submitter.main()
         sys.exit(0)
-    elif sys.argv[1] == "preview_helper.py":
+    elif first_arg == "preview_helper.py":
         import preview_helper
+        sys.argv = [sys.argv[0]] + sys.argv[2:]
         preview_helper.main()
         sys.exit(0)
 
