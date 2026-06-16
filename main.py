@@ -4,7 +4,7 @@ Không chứa logic app, chỉ load từ root folder."""
 import sys
 import os
 
-APP_VERSION = "1.0.32"
+APP_VERSION = "1.0.33"
 
 import json
 
@@ -14,7 +14,7 @@ if getattr(sys, 'frozen', False):
 else:
     RUNNING_DIR = os.path.dirname(os.path.abspath(__file__))
 
-APP_VERSION = "1.0.32"
+APP_VERSION = "1.0.33"
 version_path = os.path.join(RUNNING_DIR, "version.json")
 if os.path.exists(version_path):
     try:

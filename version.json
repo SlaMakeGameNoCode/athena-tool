@@ -1,5 +1,5 @@
 {
-  "version": "1.0.32",
+  "version": "1.0.33",
   "released_at": "2026-06-16",
-  "changelog": "Cập nhật cơ chế bóc tách nhiệm vụ giao việc cho nhiều nhân sự thành các task thô riêng biệt ngay từ Tab 1; đồng thời tự động biên tập và làm sạch tin nhắn thô (loại bỏ emoji, tag @username) ngay khi tổng hợp."
+  "changelog": "Tối ưu dung lượng file EXE (giảm từ 189MB xuống ~96MB), sửa cơ chế hiển thị version động từ version.json và sửa lỗi không tự động khởi động lại sau khi update trên Windows."
 }
