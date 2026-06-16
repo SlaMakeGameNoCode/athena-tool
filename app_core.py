@@ -1420,7 +1420,7 @@ def apply_update_endpoint():
                 if os.name == 'nt':
                     DETACHED_PROCESS = 0x00000008
                     CREATE_NEW_PROCESS_GROUP = 0x00000200
-                    cmd = f'""ping 127.0.0.1 -n 3 > nul & start "" "{exe_path}" {args_str}""'
+                    cmd = f'ping 127.0.0.1 -n 3 > nul & start "" "{exe_path}" {args_str}'
                     subprocess.Popen(cmd, shell=True, cwd=BASE_DIR, creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
                 else:
                     os.execv(exe_path, [exe_path] + sys.argv)
