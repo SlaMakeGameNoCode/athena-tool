@@ -1,5 +1,5 @@
 {
-  "version": "1.0.37",
+  "version": "1.0.38",
   "released_at": "2026-06-16",
-  "changelog": "Bổ sung các file thư viện mới (workai_api.py, sync_calendar.py, sync_gitlab.py) vào danh sách tải cập nhật của updater.py."
+  "changelog": "Bản cập nhật v1.0.38 để đồng bộ hóa đầy đủ các file thư viện mới (workai_api.py, sync_calendar.py, sync_gitlab.py) sang máy người dùng."
 }
