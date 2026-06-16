@@ -166,8 +166,12 @@ Hãy tuân thủ các quy tắc lọc (Rules A-H trong tài liệu đính kèm).
 - ĐỐI VỚI các phòng có tên bắt đầu bằng "Git -" (lịch sử commit Git): Hãy trích xuất TẤT CẢ các commit này thành đầu việc, tuyệt đối không được lọc bỏ và không áp dụng quy tắc lọc người gửi cho các phòng này.
 - NẾU cuộc hội thoại diễn ra giữa những người khác trên kênh chung mà {user_name} không tham gia, hoặc chỉ là báo cáo lỗi chung chung của team mà không chỉ định đích danh {user_name} -> BỎ QUA HOÀN TOÀN, TUYỆT ĐỐI KHÔNG TẠO TASK! Không được tự suy diễn kiểu "gián tiếp qua chat".
 - MỘT ROOM CÓ THỂ CÓ NHIỀU VIỆC KHÁC NHAU. Hãy TÁCH RIÊNG RẼ từng đầu việc độc lập ra thành các object khác nhau.
-- Tóm tắt gọn gàng nội dung của từng đầu việc đó.
 - Dựa vào tên room (nhóm chat) hoặc nội dung chat, hãy GÁN mã dự án (project_code) phù hợp nhất từ danh sách dự án (nếu có). Ví dụ: nhóm chat tên "skullhero" thì dự án có thể là game RPG. Nếu không chắc chắn, để rỗng.
+
+- **QUY TẮC BIÊN TẬP LẠI NỘI DUNG (TRƯỜNG 'text')**:
+  + Bạn BẮT BUỘC phải làm sạch và biên tập viết lại trường `text` của công việc một cách gọn gàng, súc tích.
+  + Hãy loại bỏ toàn bộ tên người gửi dư thừa, các tag chat (Ví dụ: `@Tandm`, `@Vuongdm`), và loại bỏ mọi emoji thừa thãi khỏi nội dung công việc.
+  + Ghi rõ nội dung công việc cần làm một cách tường minh (Ví dụ thay vì 'Giao việc: @Tandm đẩy map mới... @Vuongdm setup...' hãy biên tập lại thành 'Chỉ đạo và phân công nhân sự đẩy map mới lên để cài đặt quái, thực hiện setup map mới và đặt quái').
 
 LƯU Ý NHẬN DIỆN NGƯỜI DÙNG CHÍNH ĐỂ LỌC:
 - Họ và tên người dùng cần quét việc: "{user_name}"
@@ -179,9 +183,9 @@ Trả về kết quả DƯỚI DẠNG CHUẨN JSON ARRAY, KHÔNG KÈM TEXT NÀO 
 {{
   "room_name": "Tên phòng chat",
   "sender": "Tên người yêu cầu chính",
-  "text": "Nội dung tóm tắt của công việc cần làm (viết dạng mô tả ngắn)",
-  "project_code": "Mã dự án (ví dụ: GCCF, YQ3) hoặc để rỗng nếu không xác định được",
-  "original_chat": "Trích dẫn nguyên văn đoạn chat/commit gốc làm cơ sở sinh ra task này"
+  "text": "Nội dung tóm tắt của công việc đã biên tập lại sạch sẽ (không chứa emoji, không chứa tag @username, viết rõ ràng ngắn gọn hành động)",
+  "project_code": "Mã dự án (ví dụ: GRPG, GSSP) hoặc để rỗng nếu không xác định được",
+  "original_chat": "Trích dẫn nguyên văn đoạn chat/commit gốc làm cơ sở sinh ra task này (Giữ nguyên văn có emoji và tag ở đây để đối chiếu)"
 }}
 """
     system_prompt = base_prompt + get_system_rules(user_name, user_role)
