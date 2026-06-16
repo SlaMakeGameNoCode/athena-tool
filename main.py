@@ -14,7 +14,7 @@ try:
 except Exception:
     pass
 
-APP_VERSION = "1.0.34"
+APP_VERSION = "1.0.35"
 
 import json
 
@@ -24,7 +24,7 @@ if getattr(sys, 'frozen', False):
 else:
     RUNNING_DIR = os.path.dirname(os.path.abspath(__file__))
 
-APP_VERSION = "1.0.34"
+APP_VERSION = "1.0.35"
 version_path = os.path.join(RUNNING_DIR, "version.json")
 if os.path.exists(version_path):
     try:

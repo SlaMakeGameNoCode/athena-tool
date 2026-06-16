@@ -1,5 +1,5 @@
 {
-  "version": "1.0.34",
+  "version": "1.0.35",
   "released_at": "2026-06-16",
-  "changelog": "Test A/B cho tự động cập nhật: Chuyển đổi sang cờ CREATE_NO_WINDOW và bổ sung cơ chế ghi log khởi động Athena_startup.log."
+  "changelog": "Kiểm thử phiên bản 1.0.35 để xác nhận cơ chế khởi động lại với cờ CREATE_NO_WINDOW."
 }
