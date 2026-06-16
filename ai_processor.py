@@ -160,11 +160,11 @@ def summarize_raw_chat(raw_data, provider, api_key, projects_list=None, user_nam
     
     base_prompt = f"""Bạn là trợ lý ảo PM. Nhiệm vụ của bạn là đọc log chat thô và trích xuất ra danh sách các công việc ứng viên (candidate tasks).
 Hãy tuân thủ các quy tắc lọc (Rules A-H trong tài liệu đính kèm). ĐẶC BIỆT LƯU Ý CÁC QUY TẮC SAU ĐÂY:
-- Quy tắc lọc nghiêm ngặt (chỉ lấy tin nhắn do {user_name} gửi hoặc được tag/giao việc trực tiếp) CHỈ áp dụng cho các kênh chat chung (Public Channels).
-- ĐỐI VỚI các phòng chat 1-on-1 (Direct Messages - DM) hoặc Nhóm chat riêng tư trao đổi công việc (Private Groups): Hãy trích xuất tất cả các yêu cầu công việc, báo cáo tiến độ, thảo luận công việc từ CẢ HAI PHÍA (người dùng và đối tác chat), không bắt buộc người dùng phải là người gửi hay được tag tên, vì đây là trao đổi trực tiếp phục vụ công việc của chính người dùng.
+- Quy tắc lọc nghiêm ngặt (chỉ lấy tin nhắn do {user_name} gửi, hoặc được người khác tag/nhắc tên/giao việc trực tiếp cho {user_name}) áp dụng cho tất cả các Kênh chat chung (Public Channels) và Nhóm chat riêng tư nhiều người (Private Groups).
+- ĐỐI VỚI các phòng chat 1-on-1 (Direct Messages - DM): Hãy trích xuất tất cả các yêu cầu công việc, báo cáo tiến độ, thảo luận công việc từ CẢ HAI PHÍA (người dùng và đối tác chat), vì đây là trao đổi trực tiếp riêng tư phục vụ công việc của chính người dùng.
 - ĐỐI VỚI các phòng chat tự note/ghi chú cá nhân (ví dụ: tên phòng chứa 'Onlyme', 'Notes', 'Lưu trữ', 'Ghi chú', hoặc phòng chat với chính mình): Hãy trích xuất TẤT CẢ các tin nhắn ghi chú công việc do người dùng gửi làm đầu việc (task), tuyệt đối không được lọc bỏ.
 - ĐỐI VỚI các phòng có tên bắt đầu bằng "Git -" (lịch sử commit Git): Hãy trích xuất TẤT CẢ các commit này thành đầu việc, tuyệt đối không được lọc bỏ và không áp dụng quy tắc lọc người gửi cho các phòng này.
-- NẾU cuộc hội thoại diễn ra giữa những người khác trên kênh chung mà {user_name} không tham gia, hoặc chỉ là báo cáo lỗi chung chung của team mà không chỉ định đích danh {user_name} -> BỎ QUA HOÀN TOÀN, TUYỆT ĐỐI KHÔNG TẠO TASK! Không được tự suy diễn kiểu "gián tiếp qua chat".
+- NẾU cuộc hội thoại diễn ra giữa những người khác trong Nhóm chat riêng tư hoặc Kênh chung mà {user_name} không tham gia nhắn tin, không được tag, không được nhắc tên, và không được giao việc -> BỎ QUA HOÀN TOÀN, TUYỆT ĐỐI KHÔNG TẠO TASK! Không được tự suy diễn.
 
 - **QUY TẮC TÁCH BIỆT TASK (BẮT BUỘC)**:
   + MỘT TIN NHẮN HOẶC MỘT ROOM CÓ THỂ CHỨA NHIỀU CÔNG VIỆC KHÁC NHAU. Bạn BẮT BUỘC phải tách riêng rẽ từng đầu việc độc lập ra thành các đối tượng task khác nhau.
