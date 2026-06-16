@@ -18,6 +18,7 @@ saved_kpi_tasks.json
 
 # Local Python dependencies and browser bundles
 ms-playwright/
+CompanySkills/
 __pycache__/
 *.pyc
 
