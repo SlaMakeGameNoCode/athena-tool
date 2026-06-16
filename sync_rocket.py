@@ -227,14 +227,32 @@ def main(last_sync_ms=None):
             "count": 200
         }
 
+        # Hỗ trợ rate limit retry (429 handling) với backoff giống CompanySkills
+        import time as _time_backoff
+        res = None
+        for attempt in range(3):
+            try:
+                res = requests.get(history_url, headers=headers, params=params, timeout=10)
+                if res.status_code == 429:
+                    print(f"   [!] Rate limited (429) trên '{room_name}'. Đang thử lại sau {1.5 * (attempt + 1)} giây...")
+                    _time_backoff.sleep(1.5 * (attempt + 1))
+                    continue
+                break
+            except Exception as e:
+                if attempt == 2:
+                    raise e
+                _time_backoff.sleep(1)
+
         try:
-            res = requests.get(history_url, headers=headers, params=params, timeout=10)
-            if res.status_code == 200:
+            if res and res.status_code == 200:
                 history_data = res.json()
                 if history_data.get("success"):
                     messages = history_data.get("messages", [])
                     if messages:
                         print(f"   [+] Fetched {len(messages)} messages from '{room_name}' ({room_type})")
+                        # Thêm một chút delay nhỏ giữa các request khi có nhiều phòng chat (>20) để tránh bị phạt rate limit
+                        if len(active_rooms) > 20:
+                            _time_backoff.sleep(0.3)
                         formatted_messages = []
                         for msg in reversed(messages):
                             msg_user = msg.get("u", {}).get("name") or msg.get("u", {}).get("username") or "Unknown"

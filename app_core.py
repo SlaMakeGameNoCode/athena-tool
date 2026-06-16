@@ -9,7 +9,7 @@ import os
 import sys
 import json
 
-APP_VERSION = "1.0.30"
+APP_VERSION = "1.0.31"
 
 app = FastAPI(title="Athena Assistant App")
 
@@ -88,9 +88,17 @@ def scan_projects():
     if not username or not password:
         raise HTTPException(status_code=400, detail="Thiếu WorkAI Username/Password trong .env hoặc Setup")
 
-    from workai_scraper import scan_workai_projects
+    from workai_api import WorkAIAPI
     try:
-        projects = scan_workai_projects(username, password)
+        api = WorkAIAPI()
+        login_ok, login_msg = api.login(username, password)
+        if not login_ok:
+            raise HTTPException(status_code=400, detail=f"Không thể đăng nhập WorkAI: {login_msg}")
+            
+        success, projects = api.get_projects()
+        if not success:
+            raise HTTPException(status_code=500, detail=str(projects))
+            
         with open(PROJECTS_FILE, "w", encoding="utf-8") as f:
             json.dump(projects, f, ensure_ascii=False, indent=2)
         return {"projects": projects}
@@ -211,6 +219,20 @@ def run_tonghop(force: bool = False):
             sync_git.main(last_sync_ms)
         except Exception as e:
             print("Lỗi chạy sync_git:", e)
+
+        # Run sync_gitlab
+        try:
+            import sync_gitlab
+            sync_gitlab.main(last_sync_ms)
+        except Exception as e:
+            print("Lỗi chạy sync_gitlab:", e)
+
+        # Run sync_calendar
+        try:
+            import sync_calendar
+            sync_calendar.main(last_sync_ms)
+        except Exception as e:
+            print("Lỗi chạy sync_calendar:", e)
 
         # Run sync_email
         try:
@@ -337,7 +359,6 @@ def restore_raw_tasks():
 def scan_and_fix_kpi():
     try:
         config = load_config()
-        # Fallback to .env if config is empty
         username = config.get("workai_user", "")
         password = config.get("workai_pass", "")
         
@@ -354,13 +375,61 @@ def scan_and_fix_kpi():
         if not username or not password:
             raise HTTPException(status_code=400, detail="Thiếu WorkAI Username/Password. Vui lòng cài đặt trước.")
 
-        from workai_scraper import scan_workai_kpis
+        from workai_api import WorkAIAPI
         from ai_processor import fix_kpi_tasks
         
-        # 1. Quét KPI
-        raw_kpi_tasks = scan_workai_kpis(username, password)
+        api = WorkAIAPI()
+        login_ok, login_msg = api.login(username, password)
+        if not login_ok:
+            raise HTTPException(status_code=400, detail=f"Không thể đăng nhập WorkAI: {login_msg}")
+            
+        # 1. Quét KPI qua API
+        import datetime
+        now = datetime.datetime.now()
+        year = now.year
+        month = now.month
         
+        success, kpi_res = api.get_kpi_compliance(year, month)
+        if not success:
+            raise HTTPException(status_code=500, detail=f"Lỗi lấy KPI compliance: {str(kpi_res)}")
+            
+        # Parse danh sách KPI lỗi giống format cũ: [{"title": "JIRA_KEY - SUMMARY", "reason": "...", "suggestion": "..."}]
+        raw_kpi_tasks = []
+        
+        # Mở rộng thông tin KPI score để mapping nếu kpi compliance không đủ thông tin chi tiết
+        score_success, score_res = api.get_kpi_score(year, month)
+        
+        # Lấy data lỗi từ kpi_res
+        compliance_data = kpi_res.get("data", {}) if isinstance(kpi_res, dict) else {}
+        # Hỗ trợ cấu trúc trả về hoặc fallback
+        items = compliance_data.get("items", []) if isinstance(compliance_data, dict) else []
+        if not items and isinstance(kpi_res, list):
+            items = kpi_res
+        elif not items and isinstance(kpi_res, dict):
+            # Nếu có data trực tiếp là danh sách
+            items = kpi_res.get("data", [])
+            
+        # Tìm các công việc "Không đạt"
+        for item in items:
+            status = item.get("status_text") or item.get("status") or ""
+            if "Không đạt" in status or status == "failed" or status == "non_compliant":
+                summary = item.get("summary") or item.get("issue_summary") or ""
+                key = item.get("issue_key") or item.get("key") or ""
+                reason = item.get("reason") or item.get("note") or "Sai quy chế đặt tên hoặc phân bổ giờ"
+                suggestion = item.get("suggestion") or item.get("suggest") or ""
+                
+                title = f"{key} - {summary}" if key else summary
+                raw_kpi_tasks.append({
+                    "title": title,
+                    "reason": reason,
+                    "suggestion": suggestion
+                })
+                
         if not raw_kpi_tasks:
+            # Lưu file trống để xóa dữ liệu cũ
+            kpi_file = os.path.join(BASE_DIR, "saved_kpi_tasks.json")
+            with open(kpi_file, "w", encoding="utf-8") as f:
+                json.dump([], f, ensure_ascii=False, indent=2)
             return {"status": "success", "tasks": []}
             
         # 2. Gọi AI sửa
@@ -437,21 +506,42 @@ def kpi_update(tasks: list = Body(...)):
 def save_setup(data: dict):
     platforms = data.get("platforms", [])
 
+    # Cấu trúc lại gitlab_servers từ platforms
+    gitlab_servers = []
+    for p in platforms:
+        if p.get("type") == "gitlab":
+            url = p.get("url", "")
+            token = p.get("token", "")
+            repos_raw = p.get("uid", "")
+            repos = []
+            if repos_raw:
+                try:
+                    repos = json.loads(repos_raw)
+                except Exception:
+                    pass
+            gitlab_servers.append({
+                "name": "GitLab",
+                "url": url,
+                "token": token,
+                "repositories": repos
+            })
+    
+    data["gitlab_servers"] = gitlab_servers
+
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     
-    # Also write WORKAI_USERNAME and PASSWORD to .env so old scripts work
+    # Đồng bộ sang file .env
     env_path = os.path.join(BASE_DIR, ".env")
     env_data = {}
     if os.path.exists(env_path):
         with open(env_path, "r", encoding="utf-8") as f:
             for line in f:
-                if "=" in line:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
                     k, v = line.split("=", 1)
                     env_data[k.strip()] = v.strip()
                     
-    if "workai_user" in data:
-        env_data["WORKAI_USERNAME"] = data["workai_user"]
     if "workai_pass" in data:
         env_data["WORKAI_PASSWORD"] = data["workai_pass"]
         

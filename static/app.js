@@ -45,6 +45,8 @@ document.addEventListener('DOMContentLoaded', () => {
             'all': 'Tất cả',
             'rocket': 'Rocket.Chat',
             'git': 'Git (Local)',
+            'gitlab': 'GitLab (API)',
+            'calendar': 'WorkAI Lịch họp',
             'email': 'Email (IMAP)',
             'slack': 'Slack',
             'telegram': 'Telegram'
@@ -389,6 +391,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                 <input type="text" class="plat-url" placeholder="Thư mục chứa code (VD: D:\\Projects\\GameRPG)">
                 <input type="text" class="plat-uid" placeholder="Tên tác giả commit (VD: Chu Văn Mai)">
+            `;
+        } else if (type === 'gitlab') {
+            content = `
+                <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                    <label>GitLab (API)</label>
+                    <button class="btn outline btn-remove-plat" style="width: auto; padding: 4px 8px; font-size: 0.8rem;">Xóa</button>
+                </div>
+                <input type="text" class="plat-url" placeholder="Server URL (VD: http://git.horusent.com/)">
+                <input type="password" class="plat-token" placeholder="Personal Access Token (glpat-...)">
+                <textarea class="plat-uid" placeholder="Danh sách Repo dạng JSON (VD: [{&quot;project-key&quot;: &quot;GRPG&quot;, &quot;path_with_namespace&quot;: &quot;group/repo&quot;}])" style="width: 100%; height: 60px; padding: 8px; border-radius: 8px; border: 1px solid var(--panel-border); background: var(--input-bg); color: var(--text-primary); margin-top: 5px; font-family: monospace;"></textarea>
             `;
         }
         

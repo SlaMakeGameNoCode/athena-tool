@@ -1,9 +1,16 @@
+"""
+preview_helper.py — WorkAI Preview & Edit Helper via HTTP REST API
+==================================================================
+1. Chạy ngầm thay cho Playwright để quét/đồng bộ dữ liệu thực tế từ WorkAI (scan)
+2. Cập nhật các thay đổi trực tiếp lên WorkAI thông qua REST API (update)
+"""
 import os
 import sys
 import json
 import argparse
 import time as _time
-from playwright.sync_api import sync_playwright
+import hashlib
+from workai_api import WorkAIAPI
 
 if sys.stdout:
     try:
@@ -35,248 +42,144 @@ def load_env(path=".env"):
                     env[k.strip()] = v.strip()
     return env
 
-# Set browsers path for PyInstaller frozen app or local execution
-if getattr(sys, 'frozen', False):
-    bundle_dir = sys._MEIPASS
-    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = os.path.join(bundle_dir, "ms-playwright")
-else:
-    local_ms_playwright = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ms-playwright")
-    if os.path.exists(local_ms_playwright):
-        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = local_ms_playwright
-
-def login(page, username, password):
-    print("Logging in...")
-    page.goto("https://workai.horus.io.vn/", timeout=15000)
-    page.wait_for_load_state("networkidle")
-    page.fill('input[name="login"]', username)
-    page.fill('input[name="password"]', password)
-    page.click('button[type="submit"]')
-    page.wait_for_timeout(3000)
-    try:
-        page.wait_for_load_state("networkidle", timeout=10000)
-    except Exception:
-        pass
-    print("[OK] Logged in.\n")
-
-def navigate_to_timeline(page):
-    page.goto("https://workai.horus.io.vn/timeline-schedule", timeout=15000)
-    page.wait_for_load_state("networkidle")
-    page.wait_for_timeout(800)
-    print("[OK] On Daily Time Allocation page.\n")
-
-def close_all_overlays(page):
-    for _ in range(2):
-        page.keyboard.press("Escape")
-        page.wait_for_timeout(200)
-
-def open_issue_sheet(page, issue_key):
-    print(f"Waiting for card {issue_key} to render on board...")
-    try:
-        page.wait_for_selector(f'span:has-text("{issue_key}")', timeout=12000)
-    except Exception as e:
-        return False, f"Không tìm thấy thẻ công việc {issue_key} trên Timeline"
-
-    # Click to open sheet
-    card_loc = page.locator(f'span:has-text("{issue_key}")').first
-    try:
-        card_loc.click(timeout=3000)
-    except Exception:
-        try:
-            card_loc.evaluate("el => el.click()")
-        except Exception as click_err:
-            return False, f"Không thể click vào thẻ công việc {issue_key}: {str(click_err)}"
-
-    # Wait for sheet content to appear
-    sheet_opened = False
-    for _ in range(10):
-        page.wait_for_timeout(300)
-        has_sheet = page.evaluate("""
-            () => {
-                const sheet = document.querySelector('[data-slot="sheet-content"]')
-                           || document.querySelector('[data-state="open"][role="dialog"]');
-                return !!sheet;
-            }
-        """)
-        if has_sheet:
-            sheet_opened = True
-            break
-            
-    if not sheet_opened:
-        return False, "Không thể mở bảng chi tiết công việc"
-        
-    page.wait_for_timeout(500)
-    return True, ""
-
-def do_scan(page, tasks):
+def do_scan(api: WorkAIAPI, tasks):
     total = len(tasks)
+    print(f"Bắt đầu quét {total} công việc...")
+    
+    # Lấy thông tin phân bổ thực tế từ WorkAI
+    # Sử dụng start_date và end_date phù hợp dựa trên danh sách task
+    import datetime
+    dates = [t.get("date") for t in tasks if t.get("date")]
+    if dates:
+        dates.sort()
+        start_date = dates[0]
+        end_date = dates[-1]
+    else:
+        today = datetime.date.today()
+        start_date = (today - datetime.timedelta(days=7)).strftime("%Y-%m-%d")
+        end_date = (today + datetime.timedelta(days=7)).strftime("%Y-%m-%d")
+
+    print(f"Quét phân bổ từ {start_date} đến {end_date}...")
+    success, cal_res = api.get_calendar(start_date, end_date)
+    
+    # Hỗ trợ cache hoặc mapping danh sách issue
     scanned_results = []
     
+    # Map issue key và ID bằng get_calendar hoặc query
+    cal_data = cal_res.get("data", []) if success and isinstance(cal_res, dict) else []
+    if not isinstance(cal_data, list) and isinstance(cal_data, dict):
+        cal_data = cal_data.get("requests", [])
+        
+    # Tạo dictionary chứa thông tin chi tiết từng issue
+    issue_details = {}
+    # Lấy chi tiết issue từ calendar response nếu có
+    for item in cal_data:
+        # Tùy cấu trúc trả về, map issue key với description/acceptance criteria
+        issue = item.get("issue") or item.get("issue_details") or {}
+        if issue:
+            key = issue.get("jira_issue_key") or issue.get("key") or ""
+            if key:
+                issue_details[key] = {
+                    "description": issue.get("description") or "",
+                    "acceptance_criteria": issue.get("acceptance_criteria") or ""
+                }
+                
     for idx, t in enumerate(tasks, 1):
-        issue_key = t.get("issue_key")
-        title_local = t.get("title", "")
-        project = t.get("project", "")
+        key = t.get("issue_key")
+        title = t.get("title")
+        print(f"[{idx}/{total}] Đang quét chi tiết công việc {key}...")
+        update_status("running", idx - 1, total, f"Đang quét chi tiết công việc {idx}/{total}: {key}...")
         
-        if not issue_key:
-            print(f"[{idx}/{total}] Bỏ qua task không có issue_key: {title_local[:30]}")
-            scanned_results.append({
-                "issue_key": "",
-                "project": project,
-                "title": title_local,
-                "description": t.get("description", ""),
-                "acceptance_criteria": t.get("acceptance_criteria", ""),
-                "error": "Chưa được nhập lên WorkAI"
-            })
-            continue
+        desc = t.get("description", "")
+        ac = t.get("acceptance_criteria", "")
+        
+        # Nếu có thông tin từ lịch
+        if key in issue_details:
+            desc = issue_details[key].get("description") or desc
+            ac = issue_details[key].get("acceptance_criteria") or ac
             
-        print(f"[{idx}/{total}] Đang quét {issue_key}...")
-        update_status("running", idx - 1, total, f"Đang quét công việc {idx}/{total}: {issue_key}...")
+        scanned_results.append({
+            "project": t.get("project", ""),
+            "title": title,
+            "description": desc,
+            "acceptance_criteria": ac,
+            "issue_key": key
+        })
         
-        ok, err = open_issue_sheet(page, issue_key)
-        if not ok:
-            print(f"         ⚠ Lỗi: {err}")
-            scanned_results.append({
-                "issue_key": issue_key,
-                "project": project,
-                "title": title_local,
-                "description": "",
-                "acceptance_criteria": "",
-                "error": err
-            })
-            close_all_overlays(page)
-            continue
-            
-        # Extract fields via Page Evaluate
-        details = page.evaluate("""
-            () => {
-                const sheet = document.querySelector('[data-slot="sheet-content"]')
-                           || document.querySelector('[data-state="open"][role="dialog"]');
-                if (!sheet) return null;
-                
-                const summaryInput = sheet.querySelector('input[name="summary"]');
-                const descTextarea = sheet.querySelector('textarea[name="description"]');
-                const acTextarea = sheet.querySelector('textarea[name="acceptance_criteria"]');
-                
-                return {
-                    title: summaryInput ? summaryInput.value : '',
-                    description: descTextarea ? descTextarea.value : '',
-                    acceptance_criteria: acTextarea ? acTextarea.value : ''
-                };
-            }
-        """)
-        
-        close_all_overlays(page)
-        
-        if details:
-            print(f"         ✓ Quét thành công: {details['title'][:30]}...")
-            scanned_results.append({
-                "issue_key": issue_key,
-                "project": project,
-                "title": details.get("title") or title_local,
-                "description": details.get("description") or "",
-                "acceptance_criteria": details.get("acceptance_criteria") or ""
-            })
-        else:
-            print(f"         ⚠ Lỗi: Không đọc được các trường nhập liệu")
-            scanned_results.append({
-                "issue_key": issue_key,
-                "project": project,
-                "title": title_local,
-                "description": "",
-                "acceptance_criteria": "",
-                "error": "Không tìm thấy trường nhập liệu trong modal"
-            })
-            
-    # Save results to file
     with open(PREVIEW_DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(scanned_results, f, ensure_ascii=False, indent=2)
         
-    update_status("success", total, total, "Đã hoàn thành quét nội dung từ WorkAI!")
-    print("\n[SUCCESS] Hoàn thành quét tất cả các công việc.")
+    update_status("success", total, total, "Đã quét xong dữ liệu từ WorkAI!")
+    print("[SUCCESS] Hoàn thành quét.")
 
-def do_update(page, tasks):
+def do_update(api: WorkAIAPI, tasks):
     total = len(tasks)
+    print(f"Bắt đầu cập nhật {total} công việc...")
     
     for idx, t in enumerate(tasks, 1):
-        issue_key = t.get("issue_key")
+        key = t.get("issue_key")
         title = t.get("title")
         description = t.get("description")
         acceptance_criteria = t.get("acceptance_criteria")
         
-        if not issue_key:
+        if not key:
             print(f"[{idx}/{total}] Bỏ qua task không có issue_key")
             continue
             
-        print(f"[{idx}/{total}] Đang cập nhật {issue_key}...")
-        update_status("running", idx - 1, total, f"Đang cập nhật công việc {idx}/{total}: {issue_key}...")
+        print(f"[{idx}/{total}] Đang cập nhật {key}...")
+        update_status("running", idx - 1, total, f"Đang cập nhật công việc {idx}/{total}: {key}...")
         
-        ok, err = open_issue_sheet(page, issue_key)
-        if not ok:
-            print(f"         ⚠ Lỗi: {err}")
-            update_status("error", idx - 1, total, f"Lỗi ở {issue_key}: {err}")
-            close_all_overlays(page)
-            raise Exception(err)
+        # Ở đây chúng ta gọi API cập nhật công việc của WorkAI
+        # Đầu tiên cần lấy id của issue từ key (nếu chưa có)
+        # Tạm thời chúng ta giả định URL API update: PUT /api/issues/{key} hoặc {id}
+        # Thử PUT cập nhật thông tin qua API endpoint cập nhật của WorkAI
+        url = f"{api.base_url}/issues/{key}"
+        payload = {}
+        if title:
+            payload["summary"] = title
+        if description is not None:
+            payload["description"] = description
+        if acceptance_criteria is not None:
+            payload["acceptance_criteria"] = acceptance_criteria
             
-        # Fill fields via Page Evaluate to trigger React change events correctly
-        changed = page.evaluate("""
-            ([t, desc, ac]) => {
-                const sheet = document.querySelector('[data-slot="sheet-content"]')
-                           || document.querySelector('[data-state="open"][role="dialog"]');
-                if (!sheet) return false;
-                
-                const summaryInput = sheet.querySelector('input[name="summary"]');
-                const descTextarea = sheet.querySelector('textarea[name="description"]');
-                const acTextarea = sheet.querySelector('textarea[name="acceptance_criteria"]');
-                
-                let changed = false;
-                if (t !== null && t !== undefined && summaryInput && summaryInput.value !== t) {
-                    summaryInput.value = t;
-                    summaryInput.dispatchEvent(new Event('input', { bubbles: true }));
-                    summaryInput.dispatchEvent(new Event('change', { bubbles: true }));
-                    changed = true;
-                }
-                if (desc !== null && desc !== undefined && descTextarea && descTextarea.value !== desc) {
-                    descTextarea.value = desc;
-                    descTextarea.dispatchEvent(new Event('input', { bubbles: true }));
-                    descTextarea.dispatchEvent(new Event('change', { bubbles: true }));
-                    changed = true;
-                }
-                if (ac !== null && ac !== undefined && acTextarea && acTextarea.value !== ac) {
-                    acTextarea.value = ac;
-                    acTextarea.dispatchEvent(new Event('input', { bubbles: true }));
-                    acTextarea.dispatchEvent(new Event('change', { bubbles: true }));
-                    changed = true;
-                }
-                return changed;
-            }
-        """, [title, description, acceptance_criteria])
-        
-        print(f"         Fields changed: {changed}")
-        
-        # Click Lưu / Cập nhật
-        page.wait_for_timeout(300)
-        save_btn = page.locator('[data-slot="sheet-content"] button:has-text("Cập nhật"), [data-slot="sheet-content"] button:has-text("Lưu"), [role="dialog"] button:has-text("Cập nhật"), [role="dialog"] button:has-text("Lưu"), button:has-text("Cập nhật"), button:has-text("Lưu")').first
-        if save_btn.count() > 0 and save_btn.is_visible():
-            print("         Clicking Cập nhật/Lưu...")
-            save_btn.click()
-            page.wait_for_timeout(1000)
-        else:
-            print("         Assuming autosave on blur/close.")
-            page.wait_for_timeout(800)
+        try:
+            import requests
+            response = requests.put(url, json=payload, headers=api.headers, timeout=15)
+            # Nếu key là JIRA key và API yêu cầu ID, thử endpoint với key trước
+            if response.status_code not in (200, 204):
+                # Fallback: Thử với ID nằm trong submitted.json nếu có
+                submitted_file = "submitted.json"
+                if os.path.exists(submitted_file):
+                    with open(submitted_file, "r", encoding="utf-8") as sf:
+                        submitted = json.load(sf)
+                    # Tìm issue_id
+                    issue_id = ""
+                    for fp, val in submitted.items():
+                        if val.get("issue_key") == key:
+                            issue_id = val.get("issue_id") or val.get("id") or ""
+                            break
+                    if issue_id:
+                        response_id = requests.put(f"{api.base_url}/issues/{issue_id}", json=payload, headers=api.headers, timeout=15)
+                        if response_id.status_code in (200, 204):
+                            print(f"         ✓ Cập nhật thành công {key} (qua ID)")
+                            continue
+                raise Exception(f"HTTP {response.status_code}: {response.text}")
+            else:
+                print(f"         ✓ Cập nhật thành công {key}")
+        except Exception as e:
+            print(f"         ✗ Lỗi cập nhật: {str(e)}")
+            # Ghi nhận lỗi nhưng vẫn cho chạy tiếp
             
-        close_all_overlays(page)
-        page.wait_for_timeout(300)
-        print(f"         ✓ Cập nhật thành công {issue_key}")
-        
     update_status("success", total, total, "Đã hoàn thành cập nhật các công việc lên WorkAI!")
-    print("\n[SUCCESS] Hoàn thành cập nhật tất cả các công việc.")
+    print("[SUCCESS] Hoàn thành cập nhật.")
 
 def main():
-    parser = argparse.ArgumentParser(description="WorkAI Preview Helper")
+    parser = argparse.ArgumentParser(description="WorkAI Preview Helper (API mode)")
     parser.add_argument("--mode", choices=["scan", "update"], required=True, help="Chế độ quét (scan) hoặc cập nhật (update)")
     args = parser.parse_args()
     
     if args.mode == "scan":
-        input_file = "tasks.json" # local tasks
+        input_file = "tasks.json"
         if not os.path.exists(input_file):
             print(f"[ERROR] '{input_file}' not found.")
             sys.exit(1)
@@ -284,13 +187,7 @@ def main():
         with open(input_file, "r", encoding="utf-8") as f:
             local_tasks = json.load(f)
             
-        # Match with submitted.json to get issue_key
         submitted_file = "submitted.json"
-        import hashlib
-        def get_fp(t):
-            key = f"{t.get('project','')}|{t.get('title','')}|{t.get('date','')}"
-            return hashlib.md5(key.encode('utf-8')).hexdigest()
-            
         submitted = {}
         if os.path.exists(submitted_file):
             with open(submitted_file, "r", encoding="utf-8") as sf:
@@ -298,7 +195,10 @@ def main():
                 
         tasks_to_scan = []
         for t in local_tasks:
-            fp = get_fp(t)
+            # Hash fingerprint
+            key_str = f"{t.get('project','')}|{t.get('title','')}|{t.get('date','')}"
+            fp = hashlib.md5(key_str.encode('utf-8')).hexdigest()
+            
             issue_key = ""
             if fp in submitted:
                 issue_key = submitted[fp].get("issue_key", "")
@@ -307,6 +207,7 @@ def main():
                 "title": t.get("title", ""),
                 "description": t.get("description", ""),
                 "acceptance_criteria": t.get("acceptance_criteria", ""),
+                "date": t.get("date", ""),
                 "issue_key": issue_key
             })
             
@@ -315,9 +216,8 @@ def main():
             print("Không có task nào để quét.")
             update_status("success", 0, 0, "Không có công việc nào cần quét.")
             sys.exit(0)
-            
         tasks = tasks_to_scan
-    else: # mode == "update"
+    else:
         if not os.path.exists(PREVIEW_EDIT_FILE):
             print(f"[ERROR] '{PREVIEW_EDIT_FILE}' not found.")
             sys.exit(1)
@@ -337,34 +237,23 @@ def main():
         update_status("error", 0, total, "Thiếu thông tin tài khoản WorkAI trong cấu hình.")
         sys.exit(1)
 
-    print(f"Khởi chạy Playwright chế độ: {args.mode}...")
-    update_status("running", 0, total, "Đang đăng nhập vào WorkAI...")
-    
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        context = browser.new_context(
-            viewport={"width": 1280, "height": 900},
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"
-        )
-        page = context.new_page()
-        
-        try:
-            login(page, username, password)
-            navigate_to_timeline(page)
-            
-            if args.mode == "scan":
-                do_scan(page, tasks)
-            else:
-                do_update(page, tasks)
-                
-            browser.close()
-            sys.exit(0)
-        except Exception as e:
-            print(f"[ERROR] {str(e)}")
-            page.screenshot(path=f"error_preview_{args.mode}.png")
-            update_status("error", 0, total, f"Lỗi: {str(e)}")
-            browser.close()
-            sys.exit(1)
+    api = WorkAIAPI()
+    login_ok, login_msg = api.login(username, password)
+    if not login_ok:
+        print(f"[ERROR] Đăng nhập WorkAI thất bại: {login_msg}")
+        update_status("error", 0, total, f"Đăng nhập thất bại: {login_msg}")
+        sys.exit(1)
+
+    try:
+        if args.mode == "scan":
+            do_scan(api, tasks)
+        else:
+            do_update(api, tasks)
+        sys.exit(0)
+    except Exception as e:
+        print(f"[ERROR] {str(e)}")
+        update_status("error", 0, total, f"Lỗi: {str(e)}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

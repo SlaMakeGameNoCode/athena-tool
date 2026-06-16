@@ -40,3 +40,6 @@ scratch/
 .claude/
 .codex/
 .commands/
+
+# Project API Doc
+workai_api_doc.md

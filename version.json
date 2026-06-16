@@ -1,5 +1,5 @@
 {
-  "version": "1.0.30",
-  "released_at": "2026-06-15",
-  "changelog": "Khắc phục triệt để lỗi sập nguồn (reset) khi cập nhật KPI bằng cách nâng cấp CLI interceptor và loại bỏ tham số script trước khi chạy argparse; đồng thời sửa lỗi thiếu module greenlet bằng cách khai báo cả greenlet và _greenlet làm hiddenimports trong main.spec."
+  "version": "1.0.31",
+  "released_at": "2026-06-16",
+  "changelog": "Tích hợp sâu hệ thống API WorkAI, loại bỏ hoàn toàn Playwright Chromium giúp ứng dụng siêu nhẹ (~50MB) và chạy cực nhanh; tích hợp nguồn dữ liệu Lịch họp và GitLab REST API (bao gồm lấy danh sách file thay đổi diff); ràng buộc AI Chat luôn đặt tên đầu việc chuẩn Rule M."
 }
