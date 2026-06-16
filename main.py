@@ -4,7 +4,7 @@ Không chứa logic app, chỉ load từ root folder."""
 import sys
 import os
 
-APP_VERSION = "1.0.30"
+APP_VERSION = "1.0.32"
 
 if getattr(sys, 'frozen', False):
     RUNNING_DIR = os.path.dirname(sys.executable)
