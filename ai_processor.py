@@ -159,19 +159,21 @@ def summarize_raw_chat(raw_data, provider, api_key, projects_list=None, user_nam
     short_name = user_name.split()[-1] if user_name else ""
     
     base_prompt = f"""Bạn là trợ lý ảo PM. Nhiệm vụ của bạn là đọc log chat thô và trích xuất ra danh sách các công việc ứng viên (candidate tasks).
-Hãy tuân thủ các quy tắc lọc (Rules A-H trong tài liệu đính kèm). ĐẶC BIỆT LƯU Ý QUY TẮC SAU ĐÂY:
+Hãy tuân thủ các quy tắc lọc (Rules A-H trong tài liệu đính kèm). ĐẶC BIỆT LƯU Ý CÁC QUY TẮC SAU ĐÂY:
 - Quy tắc lọc nghiêm ngặt (chỉ lấy tin nhắn do {user_name} gửi hoặc được tag/giao việc trực tiếp) CHỈ áp dụng cho các kênh chat chung (Public Channels).
 - ĐỐI VỚI các phòng chat 1-on-1 (Direct Messages - DM) hoặc Nhóm chat riêng tư trao đổi công việc (Private Groups): Hãy trích xuất tất cả các yêu cầu công việc, báo cáo tiến độ, thảo luận công việc từ CẢ HAI PHÍA (người dùng và đối tác chat), không bắt buộc người dùng phải là người gửi hay được tag tên, vì đây là trao đổi trực tiếp phục vụ công việc của chính người dùng.
 - ĐỐI VỚI các phòng chat tự note/ghi chú cá nhân (ví dụ: tên phòng chứa 'Onlyme', 'Notes', 'Lưu trữ', 'Ghi chú', hoặc phòng chat với chính mình): Hãy trích xuất TẤT CẢ các tin nhắn ghi chú công việc do người dùng gửi làm đầu việc (task), tuyệt đối không được lọc bỏ.
 - ĐỐI VỚI các phòng có tên bắt đầu bằng "Git -" (lịch sử commit Git): Hãy trích xuất TẤT CẢ các commit này thành đầu việc, tuyệt đối không được lọc bỏ và không áp dụng quy tắc lọc người gửi cho các phòng này.
 - NẾU cuộc hội thoại diễn ra giữa những người khác trên kênh chung mà {user_name} không tham gia, hoặc chỉ là báo cáo lỗi chung chung của team mà không chỉ định đích danh {user_name} -> BỎ QUA HOÀN TOÀN, TUYỆT ĐỐI KHÔNG TẠO TASK! Không được tự suy diễn kiểu "gián tiếp qua chat".
-- MỘT ROOM CÓ THỂ CÓ NHIỀU VIỆC KHÁC NHAU. Hãy TÁCH RIÊNG RẼ từng đầu việc độc lập ra thành các object khác nhau.
-- Dựa vào tên room (nhóm chat) hoặc nội dung chat, hãy GÁN mã dự án (project_code) phù hợp nhất từ danh sách dự án (nếu có). Ví dụ: nhóm chat tên "skullhero" thì dự án có thể là game RPG. Nếu không chắc chắn, để rỗng.
 
-- **QUY TẮC BIÊN TẬP LẠI NỘI DUNG (TRƯỜNG 'text')**:
-  + Bạn BẮT BUỘC phải làm sạch và biên tập viết lại trường `text` của công việc một cách gọn gàng, súc tích.
-  + Hãy loại bỏ toàn bộ tên người gửi dư thừa, các tag chat (Ví dụ: `@Tandm`, `@Vuongdm`), và loại bỏ mọi emoji thừa thãi khỏi nội dung công việc.
-  + Ghi rõ nội dung công việc cần làm một cách tường minh (Ví dụ thay vì 'Giao việc: @Tandm đẩy map mới... @Vuongdm setup...' hãy biên tập lại thành 'Chỉ đạo và phân công nhân sự đẩy map mới lên để cài đặt quái, thực hiện setup map mới và đặt quái').
+- **QUY TẮC TÁCH BIỆT TASK (BẮT BUỘC)**:
+  + MỘT TIN NHẮN HOẶC MỘT ROOM CÓ THỂ CHỨA NHIỀU CÔNG VIỆC KHÁC NHAU. Bạn BẮT BUỘC phải tách riêng rẽ từng đầu việc độc lập ra thành các đối tượng task khác nhau.
+  + ĐẶC BIỆT: Khi có tin nhắn giao việc hoặc phân công nhiệm vụ cho nhiều nhân sự khác nhau trong cùng một dòng chat (Ví dụ phân tách bằng dấu chấm phẩy `;` hoặc chỉ định cụ thể từng người: '@Tandm làm A; @Vuongdm làm B; @Dungnd1 làm C'), bạn phải TÁCH THÀNH CÁC TASK RIÊNG BIỆT cho từng người. Không được gộp chung tất cả vào làm một task duy nhất.
+
+- **QUY TẮC BIÊN TẬP NỘI DUNG (TRƯỜNG 'text')**:
+  + Bạn phải biên tập, viết lại trường `text` của công việc một cách gọn gàng, súc tích và chuyên nghiệp.
+  + Loại bỏ toàn bộ các tag tên `@username`, emoji thừa thãi khỏi nội dung công việc.
+  + Viết rõ hành động cụ thể cần làm (Ví dụ thay vì để nguyên văn '@Tandm đẩy map mới lên để setup quái' hãy viết lại thành 'Chỉ đạo đẩy map mới lên hệ thống để chuẩn bị cài đặt quái').
 
 LƯU Ý NHẬN DIỆN NGƯỜI DÙNG CHÍNH ĐỂ LỌC:
 - Họ và tên người dùng cần quét việc: "{user_name}"
@@ -183,13 +185,12 @@ Trả về kết quả DƯỚI DẠNG CHUẨN JSON ARRAY, KHÔNG KÈM TEXT NÀO 
 {{
   "room_name": "Tên phòng chat",
   "sender": "Tên người yêu cầu chính",
-  "text": "Nội dung tóm tắt của công việc đã biên tập lại sạch sẽ (không chứa emoji, không chứa tag @username, viết rõ ràng ngắn gọn hành động)",
+  "text": "Nội dung tóm tắt của công việc đã được tách và biên tập sạch sẽ (không chứa emoji, không chứa tag @username)",
   "project_code": "Mã dự án (ví dụ: GRPG, GSSP) hoặc để rỗng nếu không xác định được",
   "original_chat": "Trích dẫn nguyên văn đoạn chat/commit gốc làm cơ sở sinh ra task này (Giữ nguyên văn có emoji và tag ở đây để đối chiếu)"
 }}
 """
     system_prompt = base_prompt + get_system_rules(user_name, user_role)
-    # Thêm chỉ thị ánh xạ động cho các quy tắc lọc cứng trong tài liệu quy chế
     system_prompt += f"\n\n--- CẤU HÌNH NGƯỜI DÙNG HIỆN TẠI ---\n- Họ và tên người dùng: {user_name}\n- Vai trò/Chức danh: {user_role}"
     if rocket_username:
         system_prompt += f"\n- Rocket.Chat Username: {rocket_username}"
