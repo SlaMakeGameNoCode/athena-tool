@@ -1,5 +1,5 @@
 {
-  "version": "1.0.33",
+  "version": "1.0.34",
   "released_at": "2026-06-16",
-  "changelog": "Tối ưu dung lượng file EXE (giảm từ 189MB xuống ~96MB), sửa cơ chế hiển thị version động từ version.json và sửa lỗi không tự động khởi động lại sau khi update trên Windows."
+  "changelog": "Test A/B cho tự động cập nhật: Chuyển đổi sang cờ CREATE_NO_WINDOW và bổ sung cơ chế ghi log khởi động Athena_startup.log."
 }
