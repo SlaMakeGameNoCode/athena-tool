@@ -1,5 +1,5 @@
 {
-  "version": "1.0.31",
+  "version": "1.0.32",
   "released_at": "2026-06-16",
-  "changelog": "Tích hợp sâu hệ thống API WorkAI, loại bỏ hoàn toàn Playwright Chromium giúp ứng dụng siêu nhẹ (~50MB) và chạy cực nhanh; tích hợp nguồn dữ liệu Lịch họp và GitLab REST API (bao gồm lấy danh sách file thay đổi diff); ràng buộc AI Chat luôn đặt tên đầu việc chuẩn Rule M."
+  "changelog": "Cập nhật cơ chế bóc tách nhiệm vụ giao việc cho nhiều nhân sự thành các task thô riêng biệt ngay từ Tab 1; đồng thời tự động biên tập và làm sạch tin nhắn thô (loại bỏ emoji, tag @username) ngay khi tổng hợp."
 }
