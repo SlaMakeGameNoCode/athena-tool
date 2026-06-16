@@ -6,11 +6,22 @@ import os
 
 APP_VERSION = "1.0.32"
 
+import json
+
 if getattr(sys, 'frozen', False):
     RUNNING_DIR = os.path.dirname(sys.executable)
     os.chdir(RUNNING_DIR)
 else:
     RUNNING_DIR = os.path.dirname(os.path.abspath(__file__))
+
+APP_VERSION = "1.0.32"
+version_path = os.path.join(RUNNING_DIR, "version.json")
+if os.path.exists(version_path):
+    try:
+        with open(version_path, "r", encoding="utf-8") as f:
+            APP_VERSION = json.load(f).get("version", APP_VERSION)
+    except Exception:
+        pass
 
 # Add RUNNING_DIR to the top of sys.path so that disk versions of modules are imported first
 sys.path.insert(0, RUNNING_DIR)
