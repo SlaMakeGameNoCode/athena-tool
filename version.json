@@ -1,5 +1,5 @@
 {
-  "version": "1.0.36",
+  "version": "1.0.37",
   "released_at": "2026-06-16",
-  "changelog": "Siết chặt quy tắc lọc AI cho nhóm riêng tư (chỉ lấy việc liên quan tới user) và sửa lỗi tự động khởi động lại bằng cờ CREATE_NEW_CONSOLE | CREATE_NO_WINDOW."
+  "changelog": "Bổ sung các file thư viện mới (workai_api.py, sync_calendar.py, sync_gitlab.py) vào danh sách tải cập nhật của updater.py."
 }

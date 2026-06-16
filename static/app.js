@@ -1035,6 +1035,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch('/api/run/taoviec', { method: 'POST' });
             if(res.ok) {
                 const data = await res.json();
+                processedTasksContent = data.content; // Cập nhật biến dữ liệu để nút Nhập việc nhận biết
                 // Render markdown content
                 document.getElementById('processed-tasks-container').innerHTML = `<pre style="white-space: pre-wrap; font-family: 'Inter', sans-serif;">${data.content}</pre>`;
                 // Chuyển tab
