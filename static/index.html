@@ -9,6 +9,38 @@
 </head>
 <body>
 
+    <!-- Banner cập nhật hệ thống hiển thị ở mọi màn hình (Login, Setup, Main) -->
+    <div class="update-container" style="padding: 15px 20px 0 20px; box-sizing: border-box; width: 100%; max-width: 600px; margin: 0 auto;">
+        <!-- Update Banner -->
+        <div id="update-banner" class="update-banner hidden">
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <div class="update-banner-icon">🔄</div>
+                <div class="update-banner-text">
+                    <strong>Có bản cập nhật mới!</strong>
+                    <span id="update-version-info"></span>
+                    <p id="update-changelog" class="update-changelog"></p>
+                </div>
+            </div>
+            <button id="btn-apply-update" class="btn update-btn" style="margin-top: 5px; width: 100%;">Cập nhật ngay</button>
+        </div>
+        <div id="update-progress" class="update-progress hidden" style="margin-bottom: 12px;">
+            <div class="update-progress-spinner"></div>
+            <span>Đang cập nhật...</span>
+        </div>
+
+        <!-- File Integrity Warning Banner -->
+        <div id="integrity-banner" class="integrity-banner hidden">
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <div class="integrity-banner-icon">⚠️</div>
+                <div class="integrity-banner-text">
+                    <strong>Phát hiện thiếu file hệ thống!</strong>
+                    <span id="integrity-files-info"></span>
+                </div>
+            </div>
+            <button id="btn-integrity-update" class="btn integrity-btn" style="margin-top: 5px; width: 100%;">Cập nhật file thiếu</button>
+        </div>
+    </div>
+
     <!-- SCENE: ĐĂNG NHẬP -->
     <div id="scene-login" class="scene active glass-panel">
         <div class="login-box">
@@ -98,30 +130,7 @@
         <div class="area-tools glass-panel">
             <div class="logo">Athena <span id="app-version-badge" class="version-badge"></span></div>
             
-            <!-- Update Banner -->
-            <div id="update-banner" class="update-banner hidden">
-                <div class="update-banner-icon">🔄</div>
-                <div class="update-banner-text">
-                    <strong>Có bản cập nhật mới!</strong>
-                    <span id="update-version-info"></span>
-                    <p id="update-changelog" class="update-changelog"></p>
-                </div>
-                <button id="btn-apply-update" class="btn update-btn">Cập nhật</button>
-            </div>
-            <div id="update-progress" class="update-progress hidden">
-                <div class="update-progress-spinner"></div>
-                <span>Đang cập nhật...</span>
-            </div>
 
-            <!-- File Integrity Warning Banner -->
-            <div id="integrity-banner" class="integrity-banner hidden">
-                <div class="integrity-banner-icon">⚠️</div>
-                <div class="integrity-banner-text">
-                    <strong>Phát hiện thiếu file hệ thống!</strong>
-                    <span id="integrity-files-info"></span>
-                </div>
-                <button id="btn-integrity-update" class="btn integrity-btn">Cập nhật file thiếu</button>
-            </div>
 
             <button id="btn-scan-projects" class="btn tool-btn outline">Làm mới Dự án WorkAI</button>
 
