@@ -86,24 +86,25 @@ class WorkAIAPI:
         payload = {
             "project_key": project_key,
             "summary": summary,
-            "description": ""
+            "description": summary  # Truyền summary làm mô tả thô ban đầu để AI có gợi ý tốt nhất
         }
         try:
             response = requests.post(url, json=payload, headers=self.headers, timeout=60)
             if response.status_code == 200:
                 res_data = response.json()
-                # API trả về gợi ý description và acceptance_criteria
+                # API trả về gợi ý suggested_description và suggested_acceptance_criteria
                 if res_data.get("success"):
                     data = res_data.get("data", {})
                     return True, {
-                        "description": data.get("description", ""),
-                        "acceptance_criteria": data.get("acceptance_criteria", "")
+                        "description": data.get("suggested_description", "") or data.get("description", ""),
+                        "acceptance_criteria": data.get("suggested_acceptance_criteria", "") or data.get("acceptance_criteria", "")
                     }
                 # Trả về mặc định nếu API lỗi gợi ý
                 return False, res_data.get("message", "Không có gợi ý AI")
             return False, f"Lỗi HTTP {response.status_code}"
         except Exception as e:
             return False, f"Lỗi kết nối: {str(e)}"
+
 
     def quick_create_issue(self, project_key, summary, description="", acceptance_criteria="", assignee=None, priority="Medium"):
         """
