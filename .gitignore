@@ -16,8 +16,7 @@ submission_status.json
 last_sync.txt
 saved_kpi_tasks.json
 
-# Local Python dependencies and browser bundles
-ms-playwright/
+# Local Python dependencies
 CompanySkills/
 __pycache__/
 *.pyc

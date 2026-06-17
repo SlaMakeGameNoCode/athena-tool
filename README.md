@@ -1,6 +1,6 @@
 # Athena Assistant - Tài liệu Dự án & Hướng dẫn Phát triển
 
-Athena Assistant là một ứng dụng Desktop WebUI (FastAPI + pywebview) giúp tự động hóa quy trình làm việc hàng ngày của Chu Văn Mai (PM & Team Lead): Quét tin nhắn, email và lịch sử git commit trong ngày, sử dụng AI để tổng hợp thành các đầu việc đạt chuẩn và tự động nhập chúng lên hệ thống quản lý công việc WorkAI bằng Playwright.
+Athena Assistant là một ứng dụng Desktop WebUI (FastAPI + pywebview) giúp tự động hóa quy trình làm việc hàng ngày của Chu Văn Mai (PM & Team Lead): Quét tin nhắn, email và lịch sử git commit trong ngày, sử dụng AI để tổng hợp thành các đầu việc đạt chuẩn và tự động nhập chúng lên hệ thống quản lý công việc WorkAI qua REST API.
 
 Tài liệu này được viết chi tiết nhằm giúp nhà phát triển tiếp theo tiếp quản, hiểu rõ kiến trúc, tính năng, quy trình build và các điểm kỹ thuật quan trọng của dự án.
 
@@ -19,12 +19,11 @@ Thư mục gốc chạy ứng dụng:
 ├── Athena.exe              <- Bộ chạy chính (không đổi)
 ├── app_core.py             <- Backend FastAPI & logic chính (Cập nhật được)
 ├── updater.py              <- Module xử lý cập nhật tự động (Cập nhật được)
-├── submitter.py            <- Kịch bản tự động nhập việc Playwright (Cập nhật được)
+├── submitter.py            <- Kịch bản tự động nhập việc qua WorkAI API (Cập nhật được)
 ├── ai_processor.py         <- Bộ xử lý Prompt & gọi API AI (Cập nhật được)
 ├── sync_rocket.py          <- Đồng bộ tin nhắn từ Rocket.Chat (Cập nhật được)
 ├── sync_git.py             <- Đồng bộ commit lịch sử Git local (Cập nhật được)
 ├── sync_email.py           <- Đồng bộ email qua IMAP SSL (Cập nhật được)
-├── workai_scraper.py       <- Quét danh sách dự án/KPI từ WorkAI (Cập nhật được)
 ├── version.json            <- Lưu thông tin phiên bản hiện tại trên đĩa
 ├── static/                 <- Thư mục chứa giao diện HTML/CSS/JS (Cập nhật được)
 ├── .env                    <- [BẢO MẬT] Cấu hình mật khẩu & Token (Không đưa lên Git)
@@ -35,7 +34,7 @@ Thư mục gốc chạy ứng dụng:
 1. **`main.py` (Launcher)**: File entry-point duy nhất được đóng gói cứng trong `Athena.exe`. Nó không chứa logic nghiệp vụ mà chỉ làm nhiệm vụ khai báo thư mục làm việc vào đầu `sys.path` để ưu tiên nạp các file code bổ sung/cập nhật ngoài ổ đĩa trước khi import `app_core.py`.
 2. **`app_core.py` (Core)**: Khởi chạy server FastAPI chạy ngầm và tạo cửa sổ pywebview trỏ vào `http://127.0.0.1:8000/`. Chứa toàn bộ API endpoints điều khiển nghiệp vụ.
 3. **`updater.py` (Bộ cập nhật)**: Sử dụng các HTTP request trực tiếp gọi lên GitHub API để kiểm tra, tải mã nguồn và cập nhật ứng dụng.
-4. **`submitter.py` (WorkAI Submitter)**: Chạy một luồng Playwright Headless/Headful giả lập đăng nhập WorkAI để tự động thêm issue và chuyển trạng thái Done.
+4. **`submitter.py` (WorkAI Submitter)**: Sử dụng WorkAI REST API để tự động thêm issue và chuyển trạng thái Done.
 5. **`ai_processor.py` (AI Engine)**: Xây dựng hệ thống prompt mẫu và kết nối API của Google Gemini, OpenAI, DeepSeek để tóm tắt chat, email thành task và sửa KPI.
 
 ---
@@ -52,8 +51,8 @@ Thư mục gốc chạy ứng dụng:
    * Hỗ trợ sửa đổi, chia nhỏ công việc hàng loạt qua khung chat AI thông minh ở thanh bên (sử dụng Patch/Full mode linh hoạt).
    * Phân tích lý do KPI "Không đạt" để sửa tiêu đề chuẩn xác mà không bị phụ thuộc vào gợi ý sai lệch của hệ thống.
 3. **Tự động Nhập việc (Auto Submission)**:
-   * Playwright tự động đăng nhập, tạo thẻ công việc trực tiếp trên ngày hiện tại của Timesheet.
-   * Tự động phân tích tên dự án từ `projects.json` để chọn đúng option trong Combobox (shadcn Command), tự động gán vào Sprint mới nhất của dự án và chuyển trạng thái thẻ sang Done.
+   * WorkAI API tự động tạo thẻ công việc trực tiếp trên ngày hiện tại của Timesheet.
+   * Tự động phân tích tên dự án từ `projects.json` để chọn đúng dự án, tự động gán vào Sprint mới nhất và chuyển trạng thái thẻ sang Done.
 4. **Tự động Cập nhật Không cần Git (Gitless Auto-Update)**:
    * Cho phép máy nhân viên tự nâng cấp tính năng chỉ bằng một click chuột ngay trên giao diện mà không cần cài đặt Git hay Python trên máy tính.
 
@@ -62,7 +61,7 @@ Thư mục gốc chạy ứng dụng:
 ## 🛠 3. Giải pháp Kỹ thuật Quan trọng cần Lưu ý
 
 ### 3.1. Thiết kế Tách rời Launcher và Core để Cập nhật Trực tiếp
-Vì file `.exe` được build bằng PyInstaller là một file tĩnh đóng gói sẵn môi trường Python runtime (~476MB), việc phân phối lại file `.exe` mỗi khi sửa code là không khả thi.
+Vì file `.exe` được build bằng PyInstaller là một file tĩnh đóng gói sẵn môi trường Python runtime (~97MB), việc phân phối lại file `.exe` mỗi khi sửa code là không khả thi.
 * **Giải pháp**: File `.exe` chỉ chạy launcher `main.py`. Khi người dùng click Cập nhật, ứng dụng tải gói ZIP mã nguồn từ GitHub (~100KB) và giải nén đè trực tiếp các file Python (`app_core.py`, `updater.py`...) ra thư mục chạy của người dùng.
 * Lệnh `sys.path.insert(0, RUNNING_DIR)` trong launcher sẽ khiến Python ưu tiên import các file code nằm ngoài đĩa cứng này trước code đóng gói sẵn trong exe.
 
@@ -93,8 +92,7 @@ Trên Windows, việc dùng `os.execv` để restart tiến trình sẽ khởi c
 1. Yêu cầu Python phiên bản `3.10` hoặc `3.12`.
 2. Cài đặt các thư viện cần thiết:
    ```bash
-   pip install fastapi uvicorn playwright pywebview python-multipart pydantic requests pyinstaller
-   playwright install chromium
+   pip install fastapi uvicorn pywebview python-multipart pydantic requests pyinstaller
    ```
 3. Chạy thử nghiệm ở chế độ phát triển:
    ```bash
@@ -130,4 +128,4 @@ Chỉ thực hiện bước này khi **thêm thư viện Python mới** (bằng 
 ## 🔒 5. Các Nguyên tắc Bảo mật & Dữ liệu
 * **Bảo vệ cấu hình cá nhân**: File `.gitignore` đã được cấu hình mặc định để **KHÔNG BAO GIỜ** đẩy các file chứa thông tin nhạy cảm của người dùng như `.env` (chứa password WorkAI, token Rocket.Chat) và `config.json` lên GitHub.
 * **Loại trừ dữ liệu khi cập nhật**: Module cập nhật trong `updater.py` đã cấu hình mảng `UPDATE_EXCLUDES` để bỏ qua các file cá nhân khi tải code mới từ GitHub về ghi đè. Không bao giờ ghi đè lên các file cấu hình và cơ sở dữ liệu Timesheet của người dùng cuối.
-* **Thư mục tài nguyên trình duyệt**: Thư mục cài đặt trình duyệt Playwright `ms-playwright` được giữ nguyên cục bộ để đảm bảo kịch bản tự động chạy offline không cần tải lại browser engine.
+* **Tự động cập nhật an toàn**: Module `updater.py` bỏ qua các file dữ liệu cá nhân khi cập nhật, chỉ ghi đè các file code và static.

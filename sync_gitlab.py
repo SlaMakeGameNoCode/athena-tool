@@ -10,7 +10,7 @@ def load_config():
             return json.load(f)
     return {}
 
-def main(last_sync_ms=None):
+def main(last_sync_ms=None, output_path=None):
     print("Bắt đầu đồng bộ GitLab commits + diff files via REST API...")
     config = load_config()
     
@@ -127,6 +127,13 @@ def main(last_sync_ms=None):
                     "messages": project_commits
                 })
 
+    if output_path:
+        if all_gitlab_commits:
+            with open(output_path, "w", encoding="utf-8") as f:
+                json.dump(all_gitlab_commits, f, ensure_ascii=False, separators=(",", ":"))
+            print(f"[GitLab Sync] Đã đồng bộ thành công {len(all_gitlab_commits)} repository GitLab.")
+        return
+
     chat_raw_path = "chat_raw.json"
     existing_chat = []
     if os.path.exists(chat_raw_path):
@@ -140,7 +147,7 @@ def main(last_sync_ms=None):
         existing_chat.extend(all_gitlab_commits)
         try:
             with open(chat_raw_path, "w", encoding="utf-8") as f:
-                json.dump(existing_chat, f, ensure_ascii=False, indent=2)
+                json.dump(existing_chat, f, ensure_ascii=False, separators=(",", ":"))
             print(f"[GitLab Sync] Đã đồng bộ thành công {len(all_gitlab_commits)} repository GitLab.")
         except Exception as e:
             print(f"[GitLab Sync] Lỗi lưu chat_raw.json: {e}")

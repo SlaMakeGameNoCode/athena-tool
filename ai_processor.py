@@ -1,5 +1,9 @@
 import os
 import json
+import time
+
+_rules_cache = None
+_rules_cache_mtime = 0
 
 # This function determines which provider to use and calls the appropriate API
 def call_ai_provider(provider, api_key, system_prompt, user_prompt, max_output_tokens=None):
@@ -62,35 +66,48 @@ def call_ai_provider(provider, api_key, system_prompt, user_prompt, max_output_t
         raise Exception("Nhà cung cấp AI không hợp lệ.")
 
 def get_system_rules(user_name=None, user_role=None):
-    """Đọc file instructions.md và .agent_rules.md để nhúng vào prompt"""
-    # 1. Thử lấy từ thư mục chạy hiện tại (workspace)
+    global _rules_cache, _rules_cache_mtime
     base_dir = os.getcwd()
     inst_path = os.path.join(base_dir, "instructions.md")
     agent_rules_path = os.path.join(base_dir, ".agent_rules.md")
     
-    # 2. Nếu không thấy, lấy từ thư mục của module (sys._MEIPASS khi đóng gói)
     if not os.path.exists(inst_path):
-        base_dir = os.path.dirname(os.path.abspath(__file__))
+        import sys
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            base_dir = sys._MEIPASS
+        else:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
         inst_path = os.path.join(base_dir, "instructions.md")
         agent_rules_path = os.path.join(base_dir, ".agent_rules.md")
-        
-    rules = ""
-    if os.path.exists(inst_path):
-        with open(inst_path, "r", encoding="utf-8") as f:
-            rules += "\n--- QUY TẮC TỪ instructions.md ---\n" + f.read()
-            
-    if os.path.exists(agent_rules_path):
-        with open(agent_rules_path, "r", encoding="utf-8") as f:
-            rules += "\n--- QUY TẮC TỪ .agent_rules.md ---\n" + f.read()
+
+    try:
+        inst_mtime = os.path.getmtime(inst_path) if os.path.exists(inst_path) else 0
+        agent_mtime = os.path.getmtime(agent_rules_path) if os.path.exists(agent_rules_path) else 0
+        latest_mtime = max(inst_mtime, agent_mtime)
+    except Exception:
+        latest_mtime = 0
+
+    if _rules_cache is not None and latest_mtime <= _rules_cache_mtime:
+        rules = _rules_cache
+    else:
+        rules = ""
+        if os.path.exists(inst_path):
+            with open(inst_path, "r", encoding="utf-8") as f:
+                rules += "\n--- QUY TẮC TỪ instructions.md ---\n" + f.read()
+        if os.path.exists(agent_rules_path):
+            with open(agent_rules_path, "r", encoding="utf-8") as f:
+                rules += "\n--- QUY TẮC TỪ .agent_rules.md ---\n" + f.read()
+        _rules_cache = rules
+        _rules_cache_mtime = latest_mtime
+
+    rules = _rules_cache
             
     if user_name:
-        # Thay thế động tên 'Chu Văn Mai' trong các quy tắc thành tên người dùng hiện tại
         rules = rules.replace("Chu Văn Mai", user_name)
         if user_name != "Chu Văn Mai":
-            rules = rules.replace("🙈🙉🙊", "")
+            rules = rules.replace("\U0001f648\U0001f649\U0001f64a", "")
         
     if user_role:
-        # Thay thế động vai trò/chức danh
         rules = rules.replace("Team Lead Game Designer & Concurrently PM (Project Manager)", user_role)
         rules = rules.replace("Team Lead Game Designer & PM", user_role)
         

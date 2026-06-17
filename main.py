@@ -24,8 +24,11 @@ if getattr(sys, 'frozen', False):
 else:
     RUNNING_DIR = os.path.dirname(os.path.abspath(__file__))
 
-APP_VERSION = "1.0.38"
+APP_VERSION = "1.1.0"
 version_path = os.path.join(RUNNING_DIR, "version.json")
+if not os.path.exists(version_path):
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        version_path = os.path.join(sys._MEIPASS, "version.json")
 if os.path.exists(version_path):
     try:
         with open(version_path, "r", encoding="utf-8") as f:

@@ -23,7 +23,7 @@ def load_env(path=".env"):
                     env[k.strip()] = v.strip()
     return env
 
-def main(last_sync_ms=None):
+def main(last_sync_ms=None, output_path=None):
     print("Bắt đầu đồng bộ Calendar từ WorkAI...")
     config = load_config()
     env = load_env()
@@ -69,6 +69,19 @@ def main(last_sync_ms=None):
                 "date": date
             })
             
+    if output_path and events:
+        calendar_room = {
+            "room_name": "WorkAI Calendar",
+            "messages": events
+        }
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump([calendar_room], f, ensure_ascii=False, separators=(",", ":"))
+        print(f"[Calendar Sync] Đã đồng bộ thành công {len(events)} sự kiện lịch.")
+        return
+
+    if output_path:
+        return
+
     # Ghi nhận vào file chat_raw.json (gộp chung với các nguồn tin nhắn khác)
     chat_raw_path = "chat_raw.json"
     existing_chat = []
@@ -89,7 +102,7 @@ def main(last_sync_ms=None):
         
         try:
             with open(chat_raw_path, "w", encoding="utf-8") as f:
-                json.dump(existing_chat, f, ensure_ascii=False, indent=2)
+                json.dump(existing_chat, f, ensure_ascii=False, separators=(",", ":"))
             print(f"[Calendar Sync] Đã đồng bộ thành công {len(events)} sự kiện lịch.")
         except Exception as e:
             print(f"[Calendar Sync] Lỗi lưu chat_raw.json: {e}")

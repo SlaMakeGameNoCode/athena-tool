@@ -28,12 +28,12 @@ UPDATE_INCLUDES = [
     "sync_rocket.py",
     "sync_git.py",
     "sync_email.py",
-    "workai_scraper.py",
     "workai_api.py",
     "sync_calendar.py",
     "sync_gitlab.py",
     "updater.py",
     "version.json",
+    "requirements.txt",
     "static",
 ]
 
@@ -51,7 +51,7 @@ UPDATE_EXCLUDES = [
     "submission_status.json",
     "last_sync.txt",
     "saved_kpi_tasks.json",
-    "ms-playwright",
+    "exe_updated.json",
 ]
 
 
@@ -109,19 +109,42 @@ def check_update(current_version):
             "remote_version": remote_ver,
             "changelog": remote.get("changelog", ""),
             "released_at": remote.get("released_at", ""),
+            "exe_update": remote.get("exe_update", ""),
         }
     except requests.exceptions.ConnectionError:
         return {
             "has_update": False,
             "current_version": current_version,
             "error": "Không có kết nối mạng.",
+            "exe_update": "",
         }
     except Exception as e:
         return {
             "has_update": False,
             "current_version": current_version,
             "error": str(e),
+            "exe_update": "",
         }
+
+
+def check_exe_update(base_dir):
+    marker_file = os.path.join(base_dir, "exe_updated.json")
+    applied_ver = ""
+    if os.path.exists(marker_file):
+        try:
+            with open(marker_file, "r", encoding="utf-8") as f:
+                applied_ver = json.load(f).get("version", "")
+        except Exception:
+            pass
+
+    current = get_local_version(base_dir) or "0.0.0"
+    info = check_update(current)
+    exe_url = info.get("exe_update", "")
+    remote_ver = info.get("remote_version", "")
+
+    if exe_url and remote_ver and remote_ver != applied_ver:
+        return True, exe_url, remote_ver
+    return False, "", ""
 
 
 def apply_update(base_dir):
@@ -225,6 +248,66 @@ def apply_update(base_dir):
                 shutil.rmtree(tmp_dir)
             except Exception:
                 pass
+
+
+def apply_exe_update(base_dir, exe_update_url):
+    tmp_dir = None
+    try:
+        import subprocess
+        tmp_dir = tempfile.mkdtemp(prefix="athena_exe_")
+        zip_path = os.path.join(tmp_dir, "update.zip")
+
+        print("[Updater] Đang tải bản cập nhật EXE...")
+        resp = requests.get(exe_update_url, timeout=300, stream=True)
+        resp.raise_for_status()
+
+        total_size = 0
+        with open(zip_path, "wb") as f:
+            for chunk in resp.iter_content(chunk_size=8192):
+                f.write(chunk)
+                total_size += len(chunk)
+        print(f"[Updater] Đã tải {total_size / 1024:.1f} KB")
+
+        print("[Updater] Đang giải nén...")
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            zf.extractall(tmp_dir)
+
+        extracted_items = [d for d in os.listdir(tmp_dir) if os.path.isdir(os.path.join(tmp_dir, d)) and d != os.path.basename(zip_path).replace(".zip", "")]
+        if not extracted_items:
+            extracted_items = [d for d in os.listdir(tmp_dir) if os.path.isdir(os.path.join(tmp_dir, d))]
+        if extracted_items:
+            src_dir = os.path.join(tmp_dir, extracted_items[0])
+        else:
+            src_dir = tmp_dir
+
+        bat_path = os.path.join(tempfile.gettempdir(), "_athena_exe_update.bat")
+        with open(bat_path, "w", encoding="ascii") as bf:
+            bf.write("@echo off\r\n")
+            bf.write("ping 127.0.0.1 -n 3 > nul\r\n")
+            bf.write(f'xcopy /E /Y /H /R "{src_dir}\\*" "{base_dir}\\"\r\n')
+            bf.write(f'cd /d "{base_dir}"\r\n')
+            bf.write(f'start "" "Athena.exe"\r\n')
+            bf.write(f'rmdir /S /Q "{tmp_dir}"\r\n')
+            bf.write(f'del "%~f0"\r\n')
+
+        CREATE_NEW_PROCESS_GROUP = 0x00000200
+        DETACHED_PROCESS = 0x00000008
+        subprocess.Popen(
+            f'cmd.exe /c "{bat_path}"',
+            shell=True,
+            creationflags=CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS,
+            close_fds=True,
+        )
+        return {"success": True, "message": "Đang cập nhật EXE, ứng dụng sẽ tự khởi động lại..."}
+
+    except Exception as e:
+        print(f"[Updater] Lỗi cập nhật EXE: {e}")
+        if tmp_dir and os.path.exists(tmp_dir):
+            try:
+                shutil.rmtree(tmp_dir)
+            except Exception:
+                pass
+        return {"success": False, "message": f"Lỗi cập nhật EXE: {str(e)}"}
 
 
 def _compare_versions(v1, v2):

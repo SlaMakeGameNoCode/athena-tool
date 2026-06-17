@@ -195,6 +195,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Check for missing files integrity
             await checkFileIntegrity();
+
+            // Check for EXE update
+            await checkExeUpdate();
         } catch (e) {
             console.log('Không thể kiểm tra cập nhật:', e);
         }
@@ -216,6 +219,23 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (e) {
             console.log('Lỗi kiểm tra toàn vẹn file:', e);
+        }
+    }
+
+    async function checkExeUpdate() {
+        try {
+            const res = await fetch('/api/update/check-exe?t=' + Date.now());
+            const data = await res.json();
+            const banner = document.getElementById('exe-update-banner');
+            const info = document.getElementById('exe-update-version-info');
+            if (data.needs_exe_update && banner) {
+                banner.classList.remove('hidden');
+                if (info) info.textContent = `v${data.version}`;
+            } else if (banner) {
+                banner.classList.add('hidden');
+            }
+        } catch (e) {
+            console.log('Lỗi kiểm tra EXE update:', e);
         }
     }
 
@@ -1686,6 +1706,53 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert('Lỗi kết nối: ' + e.message);
                 if (progress) progress.classList.add('hidden');
                 if (integrityBanner) integrityBanner.classList.remove('hidden');
+            }
+        });
+    }
+    // --- EXE Update Button Handler ---
+    const btnExeUpdate = document.getElementById('btn-apply-exe-update');
+    if (btnExeUpdate) {
+        btnExeUpdate.addEventListener('click', async () => {
+            const banner = document.getElementById('exe-update-banner');
+            const progress = document.getElementById('update-progress');
+            if (banner) banner.classList.add('hidden');
+            if (progress) {
+                progress.querySelector('span').textContent = 'Đang tải bản dựng mới...';
+                progress.classList.remove('hidden');
+            }
+
+            try {
+                const res = await fetch('/api/update/apply', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    if (progress) progress.querySelector('span').textContent = 'Đang khởi động lại với bản dựng mới...';
+                    setTimeout(() => {
+                        let attempts = 0;
+                        const tryReload = setInterval(async () => {
+                            attempts++;
+                            try {
+                                const check = await fetch('/api/version');
+                                if (check.ok) {
+                                    clearInterval(tryReload);
+                                    window.location.reload();
+                                }
+                            } catch (e) {
+                                if (attempts > 30) {
+                                    clearInterval(tryReload);
+                                    alert('Cập nhật EXE hoàn tất! Vui lòng mở lại ứng dụng.');
+                                }
+                            }
+                        }, 1500);
+                    }, 2000);
+                } else {
+                    alert('Lỗi cập nhật EXE: ' + (data.message || 'Không rõ'));
+                    if (progress) progress.classList.add('hidden');
+                    if (banner) banner.classList.remove('hidden');
+                }
+            } catch (e) {
+                alert('Lỗi kết nối: ' + e.message);
+                if (progress) progress.classList.add('hidden');
+                if (banner) banner.classList.remove('hidden');
             }
         });
     }

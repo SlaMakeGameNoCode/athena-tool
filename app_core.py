@@ -1,6 +1,4 @@
 import threading
-import uvicorn
-import webview
 from fastapi import FastAPI, HTTPException, Body, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -9,7 +7,7 @@ import os
 import sys
 import json
 
-APP_VERSION = "1.0.50"
+APP_VERSION = "1.1.0"
 
 app = FastAPI(title="Athena Assistant App")
 
@@ -34,8 +32,28 @@ else:
 
 CONFIG_FILE = os.path.join(RUNNING_DIR, "config.json")
 
+_tasks_cache = None
+_tasks_cache_dirty = True
+
+def invalidate_tasks_cache():
+    global _tasks_cache_dirty
+    _tasks_cache_dirty = True
+
 # Gắn thư mục static (CSS, JS)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+@app.middleware("http")
+async def add_timing_header(request, call_next):
+    import time
+    start = time.time()
+    response = await call_next(request)
+    duration = time.time() - start
+    response.headers["X-Process-Time"] = str(duration)
+    return response
+
+@app.get("/api/health")
+def health_check():
+    return {"status": "ok", "version": APP_VERSION}
 
 @app.get("/")
 def serve_index():
@@ -106,14 +124,17 @@ def scan_projects():
         raise HTTPException(status_code=500, detail=str(e))
 
 def get_current_day_tasks():
+    global _tasks_cache, _tasks_cache_dirty
     import time
     from datetime import datetime, timezone, timedelta
     
-    # Bắt buộc tính theo múi giờ Việt Nam (UTC+7)
     tz_vn = timezone(timedelta(hours=7))
     now_vn = datetime.now(timezone.utc).astimezone(tz_vn)
     today_midnight = now_vn.replace(hour=0, minute=0, second=0, microsecond=0)
     today_midnight_ms = int(today_midnight.timestamp() * 1000)
+
+    if not _tasks_cache_dirty and _tasks_cache is not None:
+        return _tasks_cache
 
     saved_tasks_file = os.path.join(BASE_DIR, "saved_raw_tasks.json")
     tasks = []
@@ -153,6 +174,8 @@ def get_current_day_tasks():
         except Exception as e:
             print("Lỗi dọn dẹp task cũ:", e)
 
+    _tasks_cache = current_tasks
+    _tasks_cache_dirty = False
     return current_tasks
 
 sync_lock = threading.Lock()
@@ -211,36 +234,69 @@ def run_tonghop(force: bool = False):
             print("Lỗi khởi tạo git_raw.json:", e)
 
         import sync_rocket
-        sync_rocket.main(last_sync_ms)
-        
-        # Run sync_git
-        try:
-            import sync_git
-            sync_git.main(last_sync_ms)
-        except Exception as e:
-            print("Lỗi chạy sync_git:", e)
+        import sync_git
+        import sync_gitlab
+        import sync_calendar
+        import sync_email
+        import tempfile
+        from concurrent.futures import ThreadPoolExecutor, as_completed
 
-        # Run sync_gitlab
-        try:
-            import sync_gitlab
-            sync_gitlab.main(last_sync_ms)
-        except Exception as e:
-            print("Lỗi chạy sync_gitlab:", e)
+        tmpdir = tempfile.mkdtemp()
+        outputs = {
+            "rocket": os.path.join(tmpdir, "chat_rocket.json"),
+            "git": os.path.join(tmpdir, "git_raw.json"),
+            "gitlab": os.path.join(tmpdir, "chat_gitlab.json"),
+            "calendar": os.path.join(tmpdir, "chat_calendar.json"),
+            "email": os.path.join(tmpdir, "chat_email.json"),
+        }
 
-        # Run sync_calendar
-        try:
-            import sync_calendar
-            sync_calendar.main(last_sync_ms)
-        except Exception as e:
-            print("Lỗi chạy sync_calendar:", e)
+        def _run_sync(name, module, out_path):
+            module.main(last_sync_ms, output_path=out_path)
 
-        # Run sync_email
-        try:
-            import sync_email
-            sync_email.main(last_sync_ms)
-        except Exception as e:
-            print("Lỗi chạy sync_email:", e)
-        
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = {}
+            for name, mod, out in [
+                ("rocket", sync_rocket, outputs["rocket"]),
+                ("git", sync_git, outputs["git"]),
+                ("gitlab", sync_gitlab, outputs["gitlab"]),
+                ("calendar", sync_calendar, outputs["calendar"]),
+                ("email", sync_email, outputs["email"]),
+            ]:
+                futures[executor.submit(_run_sync, name, mod, out)] = name
+            for future in as_completed(futures):
+                name = futures[future]
+                try:
+                    future.result()
+                except Exception as e:
+                    print(f"Lỗi chạy {name}:", e)
+
+        raw_path = os.path.join(BASE_DIR, "chat_raw.json")
+        git_path = os.path.join(BASE_DIR, "git_raw.json")
+
+        os.makedirs(os.path.dirname(raw_path), exist_ok=True)
+        all_messages = []
+        for name, path in outputs.items():
+            if name == "git":
+                continue
+            if os.path.exists(path):
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    if isinstance(data, list):
+                        all_messages.extend(data)
+                except Exception as e:
+                    print(f"Lỗi đọc output {name}:", e)
+
+        with open(raw_path, "w", encoding="utf-8") as f:
+            json.dump(all_messages, f, ensure_ascii=False, separators=(",", ":"))
+
+        if os.path.exists(outputs["git"]):
+            import shutil
+            shutil.copy2(outputs["git"], git_path)
+
+        import shutil
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
         # Read the generated chat_raw.json and git_raw.json
 
         raw_path = os.path.join(BASE_DIR, "chat_raw.json")
@@ -329,6 +385,7 @@ def hide_raw_task(request: dict):
     saved_tasks_file = os.path.join(BASE_DIR, "saved_raw_tasks.json")
     with open(saved_tasks_file, "w", encoding="utf-8") as f:
         json.dump(tasks, f, ensure_ascii=False, indent=2)
+    invalidate_tasks_cache()
     return {"status": "success"}
 
 @app.post("/api/raw_tasks/update_project")
@@ -341,6 +398,7 @@ def update_raw_task_project(req: UpdateProjectRequest):
     saved_tasks_file = os.path.join(BASE_DIR, "saved_raw_tasks.json")
     with open(saved_tasks_file, "w", encoding="utf-8") as f:
         json.dump(tasks, f, ensure_ascii=False, indent=2)
+    invalidate_tasks_cache()
     return {"status": "success"}
 
 @app.post("/api/raw_tasks/restore")
@@ -351,6 +409,7 @@ def restore_raw_tasks():
     saved_tasks_file = os.path.join(BASE_DIR, "saved_raw_tasks.json")
     with open(saved_tasks_file, "w", encoding="utf-8") as f:
         json.dump(tasks, f, ensure_ascii=False, indent=2)
+    invalidate_tasks_cache()
     
     active_tasks = [t for t in tasks if t.get("status") != "hide"]
     return {"status": "success", "tasks": active_tasks}
@@ -587,10 +646,12 @@ def run_kpi_update_direct(tasks):
     status_file = os.path.join(BASE_DIR, "preview_status.json")
     total = len(tasks)
 
+    log_fh = open(log_path, "a", encoding="utf-8")
+
     def write_log(msg):
         try:
-            with open(log_path, "a", encoding="utf-8") as f:
-                f.write(msg + "\n")
+            log_fh.write(msg + "\n")
+            log_fh.flush()
         except:
             pass
 
@@ -846,6 +907,10 @@ def run_kpi_update_direct(tasks):
 
     update_status("success", total, total, f"Hoàn thành! Thành công: {success_count}/{total}, Thất bại: {fail_count}/{total}")
     print(f"[KPI UPDATE] Hoàn thành. Thành công: {success_count}/{total}. Log: {log_path}")
+    try:
+        log_fh.close()
+    except:
+        pass
 
 
 @app.post("/api/setup")
@@ -1795,69 +1860,131 @@ def check_missing_files_endpoint(response: Response):
 def apply_update_endpoint():
     try:
         import updater
-        result = updater.apply_update(BASE_DIR)
+        current = updater.get_local_version(BASE_DIR) or APP_VERSION
+        info = updater.check_update(current)
+
+        if info.get("has_update"):
+            result = updater.apply_update(BASE_DIR)
+        else:
+            result = {"success": True, "message": "Không có bản cập nhật source code.", "exe_only": True}
+
         if result.get("success"):
-            # Schedule restart sau 2 giây
-            def do_restart():
-                import time
-                import subprocess
-                time.sleep(2)
-                
-                exe_path = sys.executable
-                args_str = " ".join([f'"{a}"' for a in sys.argv[1:]])
-                
-                if os.name == 'nt':
-                    CREATE_NEW_CONSOLE = 0x00000010
-                    CREATE_NO_WINDOW = 0x08000000
-                    cmd = f'ping 127.0.0.1 -n 3 > nul & start "" "{exe_path}" {args_str}'
-                    subprocess.Popen(cmd, shell=True, cwd=BASE_DIR, creationflags=CREATE_NEW_CONSOLE | CREATE_NO_WINDOW)
+            needed, exe_url, exe_ver = updater.check_exe_update(BASE_DIR)
+            if needed:
+                exe_result = updater.apply_exe_update(BASE_DIR, exe_url)
+                if exe_result.get("success"):
+                    marker_path = os.path.join(BASE_DIR, "exe_updated.json")
+                    marker_data = {"version": exe_ver, "applied_at": str(datetime.datetime.now())}
+                    with open(marker_path, "w", encoding="utf-8") as mf:
+                        json.dump(marker_data, mf)
+                    def do_restart_exe():
+                        import time
+                        import webview
+                        time.sleep(0.5)
+                        try:
+                            win = webview.active_window()
+                            if win:
+                                win.destroy()
+                        except Exception:
+                            pass
+                        os._exit(0)
+                    threading.Thread(target=do_restart_exe, daemon=True).start()
+                    return exe_result
                 else:
-                    os.execv(exe_path, [exe_path] + sys.argv)
-                
-                try:
-                    # Gracefully close window first to avoid win32 unregister window class 1411 error
-                    win = webview.active_window()
-                    if win:
-                        win.destroy()
-                except Exception:
-                    pass
-                os._exit(0)
-            threading.Thread(target=do_restart, daemon=True).start()
+                    return {"success": True, "message": f"Đã cập nhật source. Cập nhật EXE thất bại: {exe_result.get('message','')}"}
+
+            if not result.get("exe_only"):
+                def do_restart():
+                    import time
+                    import subprocess
+                    import tempfile
+                    exe_path = sys.executable
+                    args_str = " ".join([f'"{a}"' for a in sys.argv[1:]])
+                    base_dir = BASE_DIR
+                    if os.name == 'nt':
+                        bat_path = os.path.join(tempfile.gettempdir(), "_athena_restart.bat")
+                        with open(bat_path, "w", encoding="ascii") as bf:
+                            bf.write("@echo off\r\n")
+                            bf.write("ping 127.0.0.1 -n 3 > nul\r\n")
+                            bf.write(f'cd /d "{base_dir}"\r\n')
+                            bf.write(f'start "" "{exe_path}" {args_str}\r\n')
+                            bf.write(f'del "%~f0"\r\n')
+                        CREATE_NEW_PROCESS_GROUP = 0x00000200
+                        DETACHED_PROCESS = 0x00000008
+                        subprocess.Popen(
+                            f'cmd.exe /c "{bat_path}"',
+                            shell=True,
+                            cwd=base_dir,
+                            creationflags=CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS,
+                            close_fds=True,
+                        )
+                    else:
+                        os.execv(exe_path, [exe_path] + sys.argv)
+                    try:
+                        win = webview.active_window()
+                        if win:
+                            win.destroy()
+                    except Exception:
+                        pass
+                    os._exit(0)
+                threading.Thread(target=do_restart, daemon=True).start()
         return result
     except Exception as e:
         return {"success": False, "message": str(e)}
 
-def run_server():
-    # Giải phóng port 8000 trên Windows nếu bị chiếm bởi tiến trình cũ chạy ngầm
+@app.get("/api/update/check-exe")
+def check_exe_update_endpoint(response: Response):
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     try:
-        import subprocess
-        import os
-        port = 8000
-        if os.name == 'nt':
-            cmd = f'netstat -ano | findstr :{port}'
-            output = subprocess.check_output(cmd, shell=True).decode()
-            my_pid = os.getpid()
-            for line in output.splitlines():
-                if 'LISTENING' in line:
-                    parts = line.strip().split()
-                    pid = int(parts[-1])
-                    if pid != my_pid:
-                        subprocess.run(f"taskkill /F /PID {pid}", shell=True)
+        import updater
+        needed, url, ver = updater.check_exe_update(BASE_DIR)
+        return {"needs_exe_update": needed, "exe_url": url, "version": ver}
     except Exception as e:
-        print("Lỗi giải phóng port 8000:", e)
-        
+        return {"needs_exe_update": False, "error": str(e)}
+
+def run_server():
+    import uvicorn
+    import socket
+    port = 8000
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.bind(("127.0.0.1", port))
+        sock.close()
+    except OSError:
+        sock.close()
+        try:
+            import subprocess
+            if os.name == 'nt':
+                output = subprocess.check_output(f'netstat -ano | findstr :{port}', shell=True).decode()
+                for line in output.splitlines():
+                    if 'LISTENING' in line:
+                        parts = line.strip().split()
+                        pid = int(parts[-1])
+                        if pid != os.getpid():
+                            subprocess.run(f"taskkill /F /PID {pid}", shell=True, capture_output=True)
+        except Exception:
+            pass
     uvicorn.run(app, host="127.0.0.1", port=8000, log_level="error")
 
 def run(running_dir, app_version):
+    import webview
+    import time
+    import requests
     global BASE_DIR, APP_VERSION
     BASE_DIR = running_dir
     APP_VERSION = app_version
 
-    # Khởi chạy FastAPI trong một thread riêng để không block pywebview
     server_thread = threading.Thread(target=run_server, daemon=True)
     server_thread.start()
 
-    # Khởi tạo cửa sổ Desktop bằng pywebview
+    for _ in range(30):
+        try:
+            r = requests.get("http://127.0.0.1:8000/", timeout=0.5)
+            if r.status_code in (200, 404):
+                break
+        except Exception:
+            time.sleep(0.15)
+
     webview.create_window(
         title="Athena Assistant", 
         url="http://127.0.0.1:8000/",
@@ -1865,5 +1992,4 @@ def run(running_dir, app_version):
         height=800,
         min_size=(1024, 768)
     )
-    # Block thread chính cho đến khi cửa sổ bị đóng
     webview.start()

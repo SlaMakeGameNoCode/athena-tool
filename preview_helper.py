@@ -128,11 +128,13 @@ def do_update(api: WorkAIAPI, tasks):
     except Exception as le:
         print(f"⚠ Không thể tạo file log: {le}")
 
+    log_fh = open(log_path, "a", encoding="utf-8")
+
     def append_log(msg):
         print(msg)
         try:
-            with open(log_path, "a", encoding="utf-8") as f:
-                f.write(msg + "\n")
+            log_fh.write(msg + "\n")
+            log_fh.flush()
         except:
             pass
 
@@ -242,6 +244,10 @@ def do_update(api: WorkAIAPI, tasks):
     append_log("Đã hoàn thành cập nhật tất cả công việc lên WorkAI!")
     update_status("success", total, total, "Đã hoàn thành cập nhật các công việc lên WorkAI!")
     print("[SUCCESS] Hoàn thành cập nhật.")
+    try:
+        log_fh.close()
+    except:
+        pass
 
 
 def main():

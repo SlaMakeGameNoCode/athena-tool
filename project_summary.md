@@ -1,60 +1,238 @@
-# Tổng quan Dự án & Lịch sử Sửa lỗi Gần đây
+# Athena Assistant — Tổng quan Dự án (Rút gọn)
 
-Tài liệu này cung cấp cái nhìn tổng quan về kiến trúc của công cụ Athena Assistant và danh sách các lỗi nghiêm trọng đã được khắc phục gần đây từ phiên bản `v1.0.25` đến `v1.0.29`.
-
----
-
-## 1. Tổng quan Dự án (Project Overview)
-
-Athena Assistant là một ứng dụng Desktop (chạy ngầm giao diện web thông qua PyWebView + FastAPI) giúp tự động hóa quy trình quản lý công việc hàng ngày của PM trên hệ thống **WorkAI (Jira)**.
-
-### Kiến trúc Kỹ thuật (Tech Stack):
-* **Backend**: Python 3.12, FastAPI (web framework), Uvicorn (web server), Playwright (tự động hóa trình duyệt/crawler).
-* **Frontend**: HTML5, Vanilla CSS (thiết kế theo phong cách sleek dark mode / glassmorphism), Javascript (ES6).
-* **Desktop Wrapper**: PyWebView (nhúng web browser chạy ứng dụng cục bộ dưới dạng App Desktop).
-* **AI Integration**: Hỗ trợ tích hợp OpenAI và Gemini AI để chuẩn hóa tiêu đề công việc, tự động tóm tắt chat từ Rocket.Chat/Git/Email và sửa các tiêu đề KPI chưa đạt chuẩn.
-
-### Các Quy trình & Tính năng Chính:
-1. **Tổng hợp Công việc (Tab 1)**: Đồng bộ tin nhắn Rocket.Chat, lịch sử Git log, Email trong ngày và sử dụng AI để tự động trích xuất các công việc thô (raw tasks).
-2. **Tạo việc (Tab 2)**: Sử dụng AI để sinh chi tiết tiêu đề, mô tả và tiêu chí nghiệm thu theo đúng tiêu chuẩn JIRA/WorkAI, xuất ra file `memorytask.md`.
-3. **Nhập việc (Tab 3)**: Sử dụng Playwright chạy ngầm đăng nhập WorkAI và nhập toàn bộ danh sách công việc đã duyệt lên Daily Time Allocation (Timeline).
-4. **Sửa KPI (Tab 4)**: 
-   * Quét toàn bộ danh sách các issue JIRA bị đánh dấu "Không đạt" / "Chưa đạt chuẩn" từ trang `/kpi/user`.
-   * Sử dụng AI đề xuất tiêu đề mới đạt chuẩn theo quy định.
-   * Cho phép chỉnh sửa trực tiếp trên giao diện và tự động cập nhật ngược tiêu đề mới lên WorkAI qua Playwright.
+> **Phiên bản**: 1.0.50 | **Ngày tổng hợp**: 2026-06-17
+> **Người dùng**: Chu Văn Mai — Team Lead Game Designer & PM @ Horus Production
 
 ---
 
-## 2. Nhật ký Sửa lỗi Gần đây (Recent Bug Fixes)
+## 1. Mục đích
 
-Dưới đây là chi tiết phân tích và cách khắc phục các sự cố phát sinh gần đây:
+Athena Assistant là ứng dụng **Desktop tự động hóa quy trình làm việc hàng ngày**: quét tin nhắn (Rocket.Chat, email, Git, GitLab, Calendar), dùng AI lọc & tóm tắt thành đầu việc, rồi tự động nhập lên cổng **WorkAI** (chấm công/KPI).
 
-### Phiên bản v1.0.25 & v1.0.26: Tránh gộp chung các đầu việc KPI lỗi
-* **Sự cố**: Khi quét trang `/kpi/user`, toàn bộ 11 issue lỗi bị gộp chung thành một đầu việc duy nhất trên giao diện.
-* **Nguyên nhân**: Tool nhận diện nhầm khối thống kê điểm số ở đầu trang (chứa text báo cáo tổng quan có chữ "Không đạt") làm hàng dữ liệu, dẫn đến bỏ qua các hàng issue thật sự do trùng lặp vân tay.
-* **Khắc phục**: 
-  * Cải tiến giải thuật Javascript định vị hàng `TR`: Yêu cầu hàng dữ liệu bắt buộc phải chứa mã khóa JIRA dạng `[A-Z0-9]+-\d+` và có chiều dài text dưới 800 ký tự.
-  * Bỏ qua hoàn toàn khối thống kê điểm số ở đầu trang để quét chính xác 11 issue lỗi JIRA riêng biệt.
+---
 
-### Phiên bản v1.0.27: Triển khai Cập nhật tiêu đề KPI an toàn
-* **Sự cố**: Khi cập nhật tiêu đề KPI mới lên WorkAI, các thông tin mô tả (Description) và tiêu chí nghiệm thu (Acceptance Criteria) hiện có của issue trên WorkAI bị xóa trắng.
-* **Nguyên nhân**: API cập nhật tiêu đề chỉ lấy thông tin tiêu đề mới, các trường mô tả bị truyền dạng chuỗi rỗng (`""`), làm Playwright ghi đè xóa sạch dữ liệu cũ.
-* **Khắc phục**:
-  * Thiết lập giá trị `null` cho `description` và `acceptance_criteria` trong API cập nhật KPI.
-  * Nâng cấp Playwright trong `preview_helper.py` để kiểm tra: chỉ ghi đè dữ liệu lên WorkAI nếu giá trị truyền vào khác `null` và `undefined`. Nhờ đó bảo toàn nguyên vẹn mô tả cũ của người dùng.
+## 2. Kiến trúc Tổng thể
 
-### Phiên bản v1.0.28: Sửa lỗi Quét KPI trả về 0 kết quả
-* **Sự cố**: Tool báo tìm thấy 11 nhãn lỗi nhưng kết quả thu thập được sau khi quét hoàn tất lại bằng 0.
-* **Nguyên nhân**: Bảng issue trên trang KPI cá nhân của WorkAI hoạt động theo cơ chế **Accordion** (chỉ cho phép mở rộng chi tiết của 1 dòng tại một thời điểm). Khi click mở rộng dòng `i+1`, dòng `i` sẽ tự động thu gọn và phần tử HTML chi tiết lỗi của nó bị xóa khỏi DOM. Giải thuật cũ mở rộng tất cả các hàng trước rồi mới cào đồng loạt dẫn đến các dòng trước đó bị ẩn hết.
-* **Khắc phục**:
-  * Thay đổi sang cơ chế **Quét tuần tự và tức thời**: Đối với mỗi dòng lỗi $\rightarrow$ click mở rộng $\rightarrow$ đợi 800ms $\rightarrow$ cào ngay thông tin từ dòng chi tiết kế tiếp (`nextElementSibling` của TR) $\rightarrow$ lưu trữ rồi mới chuyển sang dòng sau.
-  * Sử dụng bộ định vị động `nth(idx)` của Playwright để tránh lỗi `stale element reference` khi DOM thay đổi trạng thái đóng/mở hàng liên tục.
+```
+Athena.exe (PyInstaller ~476MB, chứa Python runtime + launcher)
+  → Nạp code .py từ ổ đĩa (cho phép cập nhật nóng không cần build lại EXE)
+  → Backend: FastAPI (port 8000) 
+  → Frontend: pywebview (WebView2) hiển thị static/index.html
+```
 
-### Phiên bản v1.0.29: Khắc phục lỗi Sập nguồn (Reset) & Thiếu module greenlet trên EXE
-* **Sự cố**: Ở bản đóng gói `.exe` chạy độc lập, khi người dùng bấm "Cập nhật tiêu đề lên WorkAI", ứng dụng đột ngột biến mất (sập nguồn). Khi mở lại app và quét KPI thì báo lỗi thiếu module `greenlet._greenlet`.
-* **Nguyên nhân**:
-  * **Lỗi sập nguồn**: Do `sys.executable` trong file `.exe` trỏ tới `Athena.exe`. Tiến trình con chạy ngầm gọi `Athena.exe preview_helper.py` nhưng file `main.py` thiếu logic đánh chặn (intercept) tham số này. Do đó, tiến trình con tiếp tục chạy app GUI thứ hai, phát hiện cổng `8000` bị chiếm dụng bởi app cha và gọi lệnh `taskkill` ép buộc tắt tiến trình cha (app chính của người dùng).
-  * **Lỗi thiếu greenlet**: Khi app cha bị force-kill đột ngột, các đường dẫn thư mục tạm của PyInstaller bị lỗi. Đồng thời, cấu hình đóng gói `main.spec` chưa khai báo `greenlet` là `hiddenimports` dẫn đến thiếu file compiled C-extension `_greenlet.pyd` của Playwright.
-* **Khắc phục**:
-  * Thêm logic đánh chặn CLI cho `preview_helper.py` trong `main.py` để tiến trình con chỉ chạy script ngầm rồi thoát, không khởi động GUI và không tranh chấp cổng.
-  * Khai báo `'greenlet'` vào `hiddenimports` trong file [main.spec](file:///f:/prototype/Agent/main.spec#L9) để cam kết đóng gói đầy đủ thư viện.
+**Nguyên lý cập nhật**: `Athena.exe` chỉ là launcher. Code thực thi (`app_core.py`, `submitter.py`...) nằm ngoài ổ đĩa, ưu tiên import qua `sys.path.insert(0, RUNNING_DIR)`. Khi cập nhật, chỉ tải ~100KB ZIP từ GitHub ghi đè file `.py`, không cần build lại EXE.
+
+---
+
+## 3. Cấu trúc thư mục
+
+| File/Thư mục | Vai trò |
+|---|---|
+| `main.py` | Entry-point launcher, đóng gói trong EXE |
+| `app_core.py` | **Core**: FastAPI server + toàn bộ API endpoints + logic nghiệp vụ |
+| `updater.py` | Kiểm tra & tải cập nhật từ GitHub (REST API + ZIP) |
+| `ai_processor.py` | Prompt builder, gọi AI API (Gemini/OpenAI/DeepSeek) để lọc chat, sinh task, sửa KPI |
+| `submitter.py` | Tự động tạo issue trên WorkAI qua HTTP API + chuyển trạng thái Done |
+| `workai_api.py` | Wrapper HTTP client cho toàn bộ WorkAI REST API |
+| `sync_rocket.py` | Đồng bộ tin nhắn Rocket.Chat (subscriptions + messages) |
+| `sync_git.py` | Quét git log local (theo author + since) |
+| `sync_gitlab.py` | Quét commit GitLab qua REST API (theo author email) |
+| `sync_email.py` | Đọc email qua IMAP SSL, clean HTML, gom nhóm thread |
+| `sync_calendar.py` | Lấy lịch họp từ WorkAI Calendar API |
+| `preview_helper.py` | Helper tạo preview giao diện (subprocess của main.py) |
+| `static/` | Frontend: `index.html`, `app.js`, `style.css` |
+| `config.json` | Cấu hình người dùng (AI provider, WorkAI credentials, platforms) |
+| `.env` | Token & password nhạy cảm (KHÔNG đẩy lên Git) |
+| `version.json` | Phiên bản hiện tại + changelog |
+| `projects.json` | Cache danh sách dự án WorkAI |
+| `CompanySkills/` | MCP skills: scripts JS + memories + credentials |
+
+### Thư mục phụ trợ
+
+| Thư mục | Mô tả |
+|---|---|
+| `scratch/` | Script thử nghiệm |
+| `build/main/` | Artifacts build PyInstaller |
+
+---
+
+## 4. Luồng Hoạt động Chính (3 bước)
+
+### Bước 1: `/tonghop` — Quét & Lọc
+
+```
+sync_rocket.py ──→ chat_raw.json
+sync_git.py    ──→ git_raw.json
+sync_gitlab.py ──→ (append to chat_raw.json)
+sync_calendar.py ─→ (append to chat_raw.json)
+sync_email.py  ──→ (append to chat_raw.json)
+         ↓
+   ai_processor.py (AI lọc noise, trích xuất task)
+         ↓
+   saved_raw_tasks.json  ←  Lưu trạng thái (active/hide)
+         ↓
+   User review → approved_tasks.json
+```
+
+### Bước 2: `/taoviec` — Viết nội dung
+
+```
+approved_tasks.json  →  AI sinh tiêu đề chuẩn (≥50 ký tự)
+                    →  memorytask.md
+```
+
+### Bước 3: `/nhapviec` — Nhập WorkAI
+
+```
+memorytask.md  →  tasks.json (thêm metadata: status=Done, sprint=latest, date=...)
+              →  submitter.py (tạo issue qua API → chuyển Done)
+              →  submitted.json (chống duplicate)
+```
+
+---
+
+## 5. Các Module Chi tiết
+
+### 5.1 `app_core.py` — Backend Core
+- **Framework**: FastAPI + uvicorn + pywebview
+- **Auth**: Hardcode `admin / 123456` (bảo vệ cục bộ)
+- **API Endpoints chính**:
+
+| Endpoint | Method | Chức năng |
+|---|---|---|
+| `/api/login` | POST | Xác thực người dùng |
+| `/api/projects` | GET | Đọc danh sách dự án từ cache |
+| `/api/projects/scan` | GET | Quét dự án mới từ WorkAI API |
+| `/api/run/tonghop` | POST | Chạy luồng tổng hợp (tất cả sync + AI) |
+| `/api/raw_tasks/hide` | POST | Ẩn task không liên quan |
+| `/api/raw_tasks/update_project` | POST | Gán project cho task |
+| `/api/raw_tasks/restore` | POST | Khôi phục task đã ẩn |
+| `/api/kpi/scan_and_fix` | POST | Quét & sửa KPI "Không đạt" |
+| `/api/update/check` | GET | Kiểm tra phiên bản mới |
+| `/api/update/apply` | POST | Tải & cài bản cập nhật |
+| `/api/config/load` | GET | Đọc cấu hình |
+| `/api/config/save` | POST | Lưu cấu hình |
+
+- **Sync lock**: Dùng `threading.Lock()` chống chạy đồng thời
+- **Timezone**: Luôn dùng UTC+7 (Việt Nam)
+
+### 5.2 `ai_processor.py` — AI Engine
+- **Providers**: Google Gemini (`gemini-1.5-flash`), OpenAI (`gpt-4o-mini`), DeepSeek (`deepseek-chat`)
+- **Hàm chính**:
+  - `summarize_raw_chat()`: Nhận raw chat JSON → trả về JSON array các task ứng viên (đã lọc noise)
+  - `generate_tasks()`: Từ danh sách task → sinh `memorytask.md`
+  - `fix_kpi_tasks()`: Đọc lý do KPI "Không đạt" → sửa tiêu đề (bỏ qua suggestion)
+  - `get_system_rules()`: Đọc `instructions.md` + `.agent_rules.md` nhúng vào prompt
+
+### 5.3 `submitter.py` — WorkAI Submitter
+- Dùng **HTTP API thuần** (không Playwright)
+- Quy trình mỗi task:
+  1. Gọi API `suggest-description` để AI sinh mô tả
+  2. Gọi API `quick-create` tạo issue
+  3. Gọi API `transitions` chuyển trạng thái → Done
+- Chống duplicate: hash `project|title|date` → `submitted.json`
+- Mapping project: `projects.json` + legacy map (`PROJECT_CODE_MAP`)
+
+### 5.4 `workai_api.py` — WorkAI API Client
+- **Base URL**: `https://workai-be.horus.io.vn/api`
+- **Methods**: `login`, `get_projects`, `suggest_description`, `quick_create_issue`, `get_kpi_compliance`, `get_kpi_score`, `get_calendar`, `update_issue_summary`
+
+### 5.5 `sync_rocket.py` — Rocket.Chat Sync
+- Dùng REST API (`X-User-Id` + `X-Auth-Token`)
+- Lấy subscriptions → lọc theo `lm`/`_updatedAt` → fetch messages từng room active
+- **Blacklist**: `excluded_rooms` từ `config.json` + `.env` (`ROCKET_EXCLUDED_ROOMS`)
+- Tự động lấy tên/username từ `/api/v1/me`
+
+### 5.6 `sync_git.py` — Git Local Sync
+- Chạy `git log --author=... --since=...` trong thư mục local
+- Lọc bỏ merge commits
+
+### 5.7 `sync_gitlab.py` — GitLab API Sync
+- Dùng GitLab REST API + Personal Access Token
+- Lấy commits theo branch, lọc theo author email
+
+### 5.8 `sync_email.py` — Email IMAP Sync
+- Kết nối IMAP SSL, tìm email trong ngày
+- Clean HTML → text, decode MIME words
+- Gom nhóm theo thread (normalize subject, bỏ Re:/Fw:)
+
+### 5.9 `sync_calendar.py` — WorkAI Calendar Sync
+- Gọi WorkAI Calendar API (7 ngày gần nhất)
+- Merge vào `chat_raw.json` dưới dạng room "WorkAI Calendar"
+
+### 5.10 `updater.py` — Auto Updater
+- GitHub repo: `SlaMakeGameNoCode/athena-tool` (branch `main`)
+- Check version qua `raw.githubusercontent.com` (kèm timestamp `?t=...` để bypass CDN cache)
+- Tải ZIP, giải nén, copy file theo whitelist (`UPDATE_INCLUDES`)
+- **Không ghi đè** file dữ liệu user (`UPDATE_EXCLUDES`)
+- Restart an toàn: dùng `ping -n 3` delay 2s + `os._exit(0)`
+
+---
+
+## 6. Quy tắc Lọc & Định dạng (Rules A-M)
+
+| Rule | Mô tả |
+|---|---|
+| **A** | Chỉ lấy chat liên quan đến user (task, troubleshooting, business, HR, meeting) → lọc bỏ gossip, đồ ăn, xe cộ |
+| **B** | Tiêu đề: `[Hành động] - [Mục tiêu]`, **≥50 ký tự** |
+| **E** | **Không tự đoán project** → luôn hỏi user |
+| **F** | Luôn quét phòng "Notification" / "Petition" (lịch họp, đơn từ) |
+| **G** | Luôn quét DM / private chat có hoạt động trong ngày |
+| **H** | Blacklist phòng: `HorusXamF`, `ComNuoc`, `CoThucMoiVucDcDao`, `CungNhauGiamCan` (+ tùy chỉnh) |
+| **I** | Tất cả task đánh `status: "Done"` |
+| **J** | Sprint: `"latest"` (Sprint mới nhất) |
+| **K** | Date: `YYYY-MM-DD` (ngày làm việc) |
+| **L** | Tổng giờ = 8.0h, phân bổ đều |
+| **M** | Sửa KPI: chỉ dựa vào "Lý do chưa đạt", **bỏ qua "Gợi ý"** |
+
+---
+
+## 7. Công nghệ & Phụ thuộc
+
+| Công nghệ | Vai trò |
+|---|---|
+| **Python 3.10/3.12** | Ngôn ngữ chính |
+| **FastAPI + uvicorn** | Backend REST API |
+| **pywebview + WebView2** | Desktop UI (nhúng browser) |
+| **requests** | HTTP client (API calls) |
+| **PyInstaller** | Đóng gói thành `.exe` |
+| **Google Gemini / OpenAI / DeepSeek** | AI providers để lọc & sinh nội dung |
+
+---
+
+## 8. File Dữ liệu & Trạng thái
+
+| File | Mục đích |
+|---|---|
+| `chat_raw.json` | Dữ liệu chat thô sau sync (tạm, reset mỗi lần chạy) |
+| `git_raw.json` | Dữ liệu git commit thô (tạm) |
+| `saved_raw_tasks.json` | Task đã AI trích xuất + trạng thái (active/hide), giữ trong ngày |
+| `approved_tasks.json` | Danh sách task đã user duyệt + gán project |
+| `memorytask.md` | Nội dung task chuẩn bị nhập WorkAI |
+| `tasks.json` | Task object có metadata (status, sprint, date) → input cho submitter |
+| `submitted.json` | Hash fingerprint các task đã nộp (chống duplicate) |
+| `submission_status.json` | Trạng thái tiến trình nộp (real-time) |
+| `last_sync.txt` | Timestamp lần sync cuối |
+
+---
+
+## 9. Luồng Cập nhật Ứng dụng
+
+```
+[User click "Cập nhật"]
+  → GET version.json từ GitHub (có timestamp bypass CDN)
+  → So sánh version → nếu mới hơn:
+      → GET ZIP từ github.com/.../archive/main.zip (~100KB)
+      → Giải nén → copy file .py + static/ đè lên thư mục gốc
+      → Bỏ qua .env, config.json, projects.json...
+      → Restart app (ping delay 2s + os._exit)
+```
+
+---
+
+## 10. Bảo mật
+
+- `.env` và `config.json` nằm trong `.gitignore`, **không bao giờ** bị ghi đè khi cập nhật
+- Token Rocket.Chat, password WorkAI lưu local, không lộ ra ngoài
+- `UPDATE_EXCLUDES` đảm bảo dữ liệu cá nhân không bị xóa khi update
+- App chỉ chạy local (`127.0.0.1:8000`), không expose ra mạng

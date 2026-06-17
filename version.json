@@ -1,5 +1,5 @@
 {
-  "version": "1.0.50",
+  "version": "1.1.0",
   "released_at": "2026-06-17",
-  "changelog": "Bản cập nhật v1.0.50: Di chuyển banner cập nhật hệ thống lên đầu trang body để hiển thị ở mọi màn hình (Login, Setup, Main), giúp người dùng lần đầu cài đặt có thể bấm cập nhật ngay khi mở ứng dụng mà không bị kẹt ở màn hình Setup."
+  "changelog": "Bản cập nhật v1.1.0: Tối ưu hiệu suất toàn diện - Chuyển sang one-dir build giúp khởi động nhanh hơn; Song song hóa 5 luồng sync; Cache AI rules và tasks trong memory; Tối ưu JSON serialization; Loại bỏ hoàn toàn Playwright; Cập nhật cơ chế tự động tải EXE mới."
 }

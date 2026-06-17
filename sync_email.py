@@ -118,7 +118,7 @@ def normalize_subject(subject):
         sub = regex.sub('', sub)
     return sub.strip()
 
-def main(last_sync_ms=None):
+def main(last_sync_ms=None, output_path=None):
     if getattr(sys, 'frozen', False):
         base_dir = os.path.dirname(sys.executable)
     else:
@@ -271,6 +271,12 @@ def main(last_sync_ms=None):
         print(f"[ERROR] Email sync failed: {e}")
         return
 
+    if output_path:
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(collected_emails, f, ensure_ascii=False, separators=(",", ":"))
+        print(f"[SUCCESS] Email sync completed! Saved {len(collected_emails)} threads to '{output_path}'.")
+        return
+
     # 3. Ghi/Gộp vào chat_raw.json
     output_file = os.path.join(base_dir, "chat_raw.json")
     existing_chats = []
@@ -299,7 +305,7 @@ def main(last_sync_ms=None):
             existing_chats.append(new_c)
 
     with open(output_file, "w", encoding="utf-8") as f:
-        json.dump(existing_chats, f, ensure_ascii=False, indent=2)
+        json.dump(existing_chats, f, ensure_ascii=False, separators=(",", ":"))
 
     print(f"[SUCCESS] Email sync completed! Added/merged {len(collected_emails)} threads into '{output_file}'.")
 

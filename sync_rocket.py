@@ -46,7 +46,7 @@ def parse_ejson_date(date_field):
             return None
     return None
 
-def main(last_sync_ms=None):
+def main(last_sync_ms=None, output_path=None):
     env = load_env()
     server_url = env.get("ROCKET_SERVER_URL", "").rstrip("/")
     user_id = env.get("ROCKET_USER_ID")
@@ -287,11 +287,14 @@ def main(last_sync_ms=None):
             print(f"[WARNING] Failed to fetch history for room {room_name}: {e}")
 
     # Save to JSON file
-    if getattr(sys, 'frozen', False):
-        base_dir = os.path.dirname(sys.executable)
+    if output_path:
+        output_file = output_path
     else:
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-    output_file = os.path.join(base_dir, "chat_raw.json")
+        if getattr(sys, 'frozen', False):
+            base_dir = os.path.dirname(sys.executable)
+        else:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+        output_file = os.path.join(base_dir, "chat_raw.json")
     import stat
     if os.path.exists(output_file):
         try:
@@ -299,7 +302,7 @@ def main(last_sync_ms=None):
         except Exception:
             pass
     with open(output_file, "w", encoding="utf-8") as f:
-        json.dump(collected_chats, f, ensure_ascii=False, indent=2)
+        json.dump(collected_chats, f, ensure_ascii=False, separators=(",", ":"))
         
     print(f"\n[SUCCESS] Sync completed! Saved raw chat history to '{output_file}'.")
     print(f"Total active rooms today captured: {len(collected_chats)}")

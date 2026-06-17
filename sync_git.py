@@ -13,10 +13,11 @@ else:
 CONFIG_FILE = os.path.join(base_dir, "config.json")
 GIT_RAW_FILE = os.path.join(base_dir, "git_raw.json")
 
-def main(last_sync_ms=None):
+def main(last_sync_ms=None, output_path=None):
+    git_file = output_path if output_path else GIT_RAW_FILE
     if not os.path.exists(CONFIG_FILE):
-        with open(GIT_RAW_FILE, "w", encoding="utf-8") as f:
-            json.dump([], f)
+        with open(git_file, "w", encoding="utf-8") as f:
+            json.dump([], f, separators=(",", ":"))
         return
 
     with open(CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -26,8 +27,8 @@ def main(last_sync_ms=None):
     git_platforms = [p for p in platforms if p.get("type") == "git"]
     
     if not git_platforms:
-        with open(GIT_RAW_FILE, "w", encoding="utf-8") as f:
-            json.dump([], f)
+        with open(git_file, "w", encoding="utf-8") as f:
+            json.dump([], f, separators=(",", ":"))
         return
         
     # Calculate since_str
@@ -83,8 +84,8 @@ def main(last_sync_ms=None):
         except Exception as e:
             print(f"Lỗi khi quét Git tại {folder_path}: {e}")
             
-    with open(GIT_RAW_FILE, "w", encoding="utf-8") as f:
-        json.dump(git_rooms, f, ensure_ascii=False, indent=2)
+    with open(git_file, "w", encoding="utf-8") as f:
+        json.dump(git_rooms, f, ensure_ascii=False, separators=(",", ":"))
 
 if __name__ == "__main__":
     main()
