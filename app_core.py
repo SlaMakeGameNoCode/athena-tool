@@ -9,7 +9,7 @@ import os
 import sys
 import json
 
-APP_VERSION = "1.0.48"
+APP_VERSION = "1.0.49"
 
 app = FastAPI(title="Athena Assistant App")
 
@@ -874,6 +874,13 @@ def save_setup(data: dict):
     
     data["gitlab_servers"] = gitlab_servers
 
+    import stat
+    if os.path.exists(CONFIG_FILE):
+        try:
+            os.chmod(CONFIG_FILE, stat.S_IWRITE)
+        except Exception:
+            pass
+
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     
@@ -881,6 +888,10 @@ def save_setup(data: dict):
     env_path = os.path.join(BASE_DIR, ".env")
     env_data = {}
     if os.path.exists(env_path):
+        try:
+            os.chmod(env_path, stat.S_IWRITE)
+        except Exception:
+            pass
         with open(env_path, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
@@ -925,6 +936,11 @@ def save_setup(data: dict):
     else:
         env_data["ROCKET_EXCLUDED_ROOMS"] = ""
 
+    if os.path.exists(env_path):
+        try:
+            os.chmod(env_path, stat.S_IWRITE)
+        except Exception:
+            pass
     with open(env_path, "w", encoding="utf-8") as f:
         for k, v in env_data.items():
             f.write(f"{k}={v}\n")
@@ -1729,12 +1745,16 @@ class TestWorkAIRequest(BaseModel):
 
 @app.post("/api/test/workai")
 def test_workai(req: TestWorkAIRequest):
-    from workai_scraper import test_workai_login
-    success, msg = test_workai_login(req.username, req.password)
-    if success:
-        return {"status": "success", "message": msg}
-    else:
-        return {"status": "error", "message": msg}
+    try:
+        from workai_api import WorkAIAPI
+        api = WorkAIAPI()
+        success, msg = api.login(req.username, req.password)
+        if success:
+            return {"status": "success", "message": msg}
+        else:
+            return {"status": "error", "message": msg}
+    except Exception as e:
+        return {"status": "error", "message": f"Lỗi kết nối: {str(e)}"}
 
 # ============================================================
 # UPDATE API ENDPOINTS

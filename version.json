@@ -1,5 +1,5 @@
 {
-  "version": "1.0.48",
+  "version": "1.0.49",
   "released_at": "2026-06-17",
-  "changelog": "Bản cập nhật v1.0.48: Sửa lỗi AI sửa KPI lấy gợi ý hệ thống làm tiêu đề - viết lại prompt AI tuân thủ Rule B (>= 50 ký tự, format [Hành động] - [Mục tiêu]), thêm validation chống copy suggestion meta."
+  "changelog": "Bản cập nhật v1.0.49: Sửa lỗi Test Đăng nhập bằng cách chuyển từ Playwright sang API login thuần của WorkAIAPI; sửa lỗi PermissionError khi ấn lưu cấu hình bằng cách xóa thuộc tính read-only của file config.json và .env trước khi ghi."
 }

@@ -115,6 +115,11 @@ def main(last_sync_ms=None):
                         cfg_changed = True
                         
                     if cfg_changed:
+                        import stat
+                        try:
+                            os.chmod(config_file, stat.S_IWRITE)
+                        except Exception:
+                            pass
                         with open(config_file, "w", encoding="utf-8") as f:
                             json.dump(cfg, f, ensure_ascii=False, indent=2)
                         print(f"[INFO] Updated config.json name to: {cfg['name']}, rocket_username to: {me_username}")
@@ -287,6 +292,12 @@ def main(last_sync_ms=None):
     else:
         base_dir = os.path.dirname(os.path.abspath(__file__))
     output_file = os.path.join(base_dir, "chat_raw.json")
+    import stat
+    if os.path.exists(output_file):
+        try:
+            os.chmod(output_file, stat.S_IWRITE)
+        except Exception:
+            pass
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(collected_chats, f, ensure_ascii=False, indent=2)
         

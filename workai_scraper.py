@@ -11,7 +11,10 @@ else:
     if os.path.exists(local_ms_playwright):
         os.environ["PLAYWRIGHT_BROWSERS_PATH"] = local_ms_playwright
 
-from playwright.sync_api import sync_playwright
+try:
+    from playwright.sync_api import sync_playwright
+except ImportError:
+    sync_playwright = None
 
 def scan_workai_projects(username, password):
     projects = []
