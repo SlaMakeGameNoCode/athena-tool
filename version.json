@@ -1,7 +1,7 @@
 {
-  "version": "1.0.40",
+  "version": "1.0.42",
   "released_at": "2026-06-17",
-  "changelog": "Bản cập nhật v1.0.40: Cải tiến quét sửa KPI qua API, hỗ trợ sửa Summary lỗi và tự động dùng AI suggest bổ sung Description tuần tự."
+  "changelog": "Bản cập nhật v1.0.42: Sửa lỗi cập nhật KPI thất bại (HTTP 500 khi update qua JIRA Key) bằng cách tự động đồng bộ và sử dụng ID số trực tiếp từ hệ thống WorkAI."
 }
 
 

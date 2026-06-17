@@ -132,18 +132,19 @@ def do_update(api: WorkAIAPI, tasks):
         update_status("running", idx - 1, total, f"Đang cập nhật công việc {idx}/{total}: {key}...")
         
         # Lấy ID của issue (để fallback nếu cập nhật qua key thất bại)
-        issue_id = ""
-        submitted_file = "submitted.json"
-        if os.path.exists(submitted_file):
-            try:
-                with open(submitted_file, "r", encoding="utf-8") as sf:
-                    submitted = json.load(sf)
-                for fp, val in submitted.items():
-                    if val.get("issue_key") == key:
-                        issue_id = val.get("issue_id") or val.get("id") or ""
-                        break
-            except Exception:
-                pass
+        issue_id = t.get("id") or t.get("issue_id") or ""
+        if not issue_id:
+            submitted_file = "submitted.json"
+            if os.path.exists(submitted_file):
+                try:
+                    with open(submitted_file, "r", encoding="utf-8") as sf:
+                        submitted = json.load(sf)
+                    for fp, val in submitted.items():
+                        if val.get("issue_key") == key:
+                            issue_id = val.get("issue_id") or val.get("id") or ""
+                            break
+                except Exception:
+                    pass
 
         # ── BƯỚC 1: SỬA LỖI SUMMARY (NẾU CÓ) ──
         # Nếu summary không hợp lệ hoặc title bị thay đổi, tiến hành sửa

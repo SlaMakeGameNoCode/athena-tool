@@ -9,7 +9,7 @@ import os
 import sys
 import json
 
-APP_VERSION = "1.0.40"
+APP_VERSION = "1.0.42"
 
 app = FastAPI(title="Athena Assistant App")
 
@@ -449,6 +449,7 @@ def scan_and_fix_kpi():
                 
                 title = f"{key} - {summary}" if key else summary
                 raw_kpi_tasks.append({
+                    "id": item.get("id") or item.get("issue_id") or "",
                     "title": title,
                     "reason": reason,
                     "suggestion": suggestion,
@@ -472,9 +473,10 @@ def scan_and_fix_kpi():
         
         fixed_tasks = fix_kpi_tasks(raw_kpi_tasks, provider, api_key, user_name, user_role)
         
-        # Đồng bộ thêm các cờ validation từ raw_kpi_tasks sang fixed_tasks
+        # Đồng bộ thêm các cờ validation và ID từ raw_kpi_tasks sang fixed_tasks
         for i, t in enumerate(fixed_tasks):
             if i < len(raw_kpi_tasks):
+                t["id"] = raw_kpi_tasks[i].get("id", "")
                 t["summary_valid"] = raw_kpi_tasks[i].get("summary_valid", True)
                 t["description_valid"] = raw_kpi_tasks[i].get("description_valid", True)
 
@@ -512,6 +514,7 @@ def kpi_update(tasks: list = Body(...)):
                     clean_title = prefix_match.group(1).strip()
                 
                 formatted_tasks.append({
+                    "id": t.get("id", ""),
                     "issue_key": issue_key,
                     "title": clean_title,
                     "description": None,
@@ -1477,6 +1480,14 @@ def apply_update_endpoint():
                     subprocess.Popen(cmd, shell=True, cwd=BASE_DIR, creationflags=CREATE_NEW_CONSOLE | CREATE_NO_WINDOW)
                 else:
                     os.execv(exe_path, [exe_path] + sys.argv)
+                
+                try:
+                    # Gracefully close window first to avoid win32 unregister window class 1411 error
+                    win = webview.active_window()
+                    if win:
+                        win.destroy()
+                except Exception:
+                    pass
                 os._exit(0)
             threading.Thread(target=do_restart, daemon=True).start()
         return result

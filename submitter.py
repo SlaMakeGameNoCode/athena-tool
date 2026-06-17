@@ -203,10 +203,8 @@ def process_task(api: WorkAIAPI, task, idx, total, hours_per_task=0.1):
         print(f"         ⚠ Time Allocation failed: {alloc_res}")
 
     print()
-    return created_key
+    return created_key, issue_id
 
-
-import requests
 
 def main():
     start = _time.time()
@@ -270,7 +268,7 @@ def main():
     for idx, task in enumerate(new_tasks, 1):
         fp = task_fingerprint(task)
         try:
-            created_key = process_task(api, task, idx, total, hours_per_task)
+            created_key, issue_id = process_task(api, task, idx, total, hours_per_task)
             ok += 1
             # Mark as submitted
             submitted[fp] = {
@@ -279,6 +277,7 @@ def main():
                 "date": task.get("date", ""),
                 "submitted_at": _time.strftime("%Y-%m-%d %H:%M:%S"),
                 "issue_key": created_key,
+                "issue_id": issue_id,
             }
             save_submitted(submitted)
             update_status("running", idx, total, f"Đã hoàn thành Task {idx}/{total}")
