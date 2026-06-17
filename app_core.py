@@ -400,23 +400,52 @@ def scan_and_fix_kpi():
         score_success, score_res = api.get_kpi_score(year, month)
         
         # Lấy data lỗi từ kpi_res
-        compliance_data = kpi_res.get("data", {}) if isinstance(kpi_res, dict) else {}
-        # Hỗ trợ cấu trúc trả về hoặc fallback
-        items = compliance_data.get("items", []) if isinstance(compliance_data, dict) else []
-        if not items and isinstance(kpi_res, list):
-            items = kpi_res
-        elif not items and isinstance(kpi_res, dict):
-            # Nếu có data trực tiếp là danh sách
-            items = kpi_res.get("data", [])
+        # WorkAI compliance API trả về cấu trúc gồm component_b.issues là mảng các task
+        items = []
+        if isinstance(kpi_res, dict):
+            # Cố gắng lấy từ component_b.issues trước (đây là nơi chứa danh sách tất cả issue đã done và trạng thái hợp lệ của chúng)
+            comp_b = kpi_res.get("component_b", {})
+            if isinstance(comp_b, dict):
+                items = comp_b.get("issues", [])
             
+            # Fallback nếu không có
+            if not items:
+                compliance_data = kpi_res.get("data", {}) if isinstance(kpi_res, dict) else {}
+                items = compliance_data.get("items", []) if isinstance(compliance_data, dict) else []
+                if not items and isinstance(kpi_res, list):
+                    items = kpi_res
+                elif not items:
+                    items = kpi_res.get("data", [])
+        
         # Tìm các công việc "Không đạt"
         for item in items:
+            # 1. Check qua cờ is_valid (ở component_b.issues: is_valid: false nghĩa là lỗi KPI)
+            is_valid = item.get("is_valid", True)
+            
+            # 2. Check qua text status cũ
             status = item.get("status_text") or item.get("status") or ""
-            if "Không đạt" in status or status == "failed" or status == "non_compliant":
+            is_failed_by_status = "Không đạt" in status or status == "failed" or status == "non_compliant"
+            
+            if not is_valid or is_failed_by_status:
                 summary = item.get("summary") or item.get("issue_summary") or ""
                 key = item.get("issue_key") or item.get("key") or ""
-                reason = item.get("reason") or item.get("note") or "Sai quy chế đặt tên hoặc phân bổ giờ"
-                suggestion = item.get("suggestion") or item.get("suggest") or ""
+                
+                # Trích xuất lý do lỗi
+                reason_list = []
+                if not item.get("summary_valid", True):
+                    ai_res = item.get("summary_ai_result", {})
+                    ai_reason = ai_res.get("reason") if isinstance(ai_res, dict) else None
+                    reason_list.append(ai_reason or "Tiêu đề không hợp lệ")
+                if not item.get("description_valid", True):
+                    reason_list.append("Mô tả trống hoặc không đạt yêu cầu")
+                if not item.get("work_time_valid", True):
+                    reason_list.append("Thời gian phân bổ không hợp lệ (lệch giờ hoặc chưa đưa vào Time Allocation)")
+                
+                reason = item.get("reason") or item.get("note") or "; ".join(reason_list) or "Sai quy chế đặt tên hoặc phân bổ giờ"
+                
+                # Trích xuất gợi ý
+                ai_res = item.get("summary_ai_result", {})
+                suggestion = item.get("suggestion") or item.get("suggest") or (ai_res.get("suggestion") if isinstance(ai_res, dict) else "") or ""
                 
                 title = f"{key} - {summary}" if key else summary
                 raw_kpi_tasks.append({
@@ -428,6 +457,7 @@ def scan_and_fix_kpi():
         if not raw_kpi_tasks:
             # Lưu file trống để xóa dữ liệu cũ
             kpi_file = os.path.join(BASE_DIR, "saved_kpi_tasks.json")
+
             with open(kpi_file, "w", encoding="utf-8") as f:
                 json.dump([], f, ensure_ascii=False, indent=2)
             return {"status": "success", "tasks": []}
