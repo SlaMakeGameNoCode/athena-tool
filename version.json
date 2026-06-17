@@ -1,5 +1,5 @@
 {
-  "version": "1.0.46",
+  "version": "1.0.47",
   "released_at": "2026-06-17",
-  "changelog": "Bản cập nhật v1.0.46: Sửa lỗi KPI update hoàn toàn - sửa sai đường dẫn API endpoint (thiếu /key/), chuyển từ subprocess sang thread trực tiếp, thêm log chi tiết mọi request/response vào kpi_update_result.log."
+  "changelog": "Bản cập nhật v1.0.47: Sửa lỗi thiếu import requests trong submitter.py, chuyển logic set status Done sang dùng Transitions API đúng chuẩn WorkAI (GET+POST /issues/{id}/transitions), thứ tự ưu tiên Done > Review Approved > In Progress."
 }

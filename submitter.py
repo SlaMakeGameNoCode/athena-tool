@@ -11,6 +11,7 @@ import sys
 import json
 import hashlib
 import time as _time
+import requests
 from workai_api import WorkAIAPI
 
 if sys.stdout:
@@ -166,28 +167,52 @@ def process_task(api: WorkAIAPI, task, idx, total, hours_per_task=0.1):
     issue_id = res_data.get("id") or res_data.get("issue_id") or ""
     print(f"         ✓ Created Issue: {created_key}")
 
-    # 3. Chuyển trạng thái sang Done
+    # 3. Chuyển trạng thái sang Done qua Transitions API
     update_status("running", idx - 1, total, f"Task {idx}/{total}: Đang chuyển trạng thái sang Done...")
     
-    # Ở đây chúng ta gọi API update trạng thái của WorkAI (mặc định tạo quick-create là Todo)
-    # Tìm cách set Done qua API cập nhật trạng thái nếu có, hoặc API update_issue.
-    # Trong trường hợp API không đổi được status, chúng ta in cảnh báo nhưng vẫn chấp nhận đã tạo thành công
-    status_url = f"{api.base_url}/issues/{issue_id}/status"
+    # Thứ tự ưu tiên: Done → Review Approved → In Progress
+    PREFERRED_STATUSES = ["Done", "Review Approved", "In Progress"]
+    
     try:
-        # Thử PUT/POST status sang Done
-        status_res = requests.put(status_url, json={"status": "Done"}, headers=api.headers, timeout=10)
-        # Nếu API trả về 200/204 tức là chuyển trạng thái thành công
-        if status_res.status_code in (200, 204):
-            print("         ✓ Status set to Done")
-        else:
-            # Fallback PUT thẳng vào url chính với status
-            status_res_2 = requests.put(f"{api.base_url}/issues/{issue_id}", json={"status": "Done"}, headers=api.headers, timeout=10)
-            if status_res_2.status_code in (200, 204):
-                print("         ✓ Status set to Done")
+        # Bước 3a: Lấy danh sách transitions khả dụng
+        transitions_url = f"{api.base_url}/issues/{issue_id}/transitions"
+        trans_res = requests.get(transitions_url, headers=api.headers, timeout=10)
+        
+        if trans_res.status_code == 200:
+            trans_data = trans_res.json()
+            transitions = trans_data.get("transitions", [])
+            
+            # Tìm transition phù hợp theo thứ tự ưu tiên
+            chosen_transition = None
+            for preferred in PREFERRED_STATUSES:
+                for t in transitions:
+                    if t.get("name", "").strip().lower() == preferred.lower():
+                        chosen_transition = t
+                        break
+                if chosen_transition:
+                    break
+            
+            if chosen_transition:
+                # Bước 3b: Thực hiện transition
+                trans_id = chosen_transition.get("id", "")
+                trans_name = chosen_transition.get("name", "")
+                post_res = requests.post(
+                    transitions_url,
+                    json={"transition_id": trans_id},
+                    headers=api.headers,
+                    timeout=10
+                )
+                if post_res.status_code in (200, 201, 204):
+                    print(f"         ✓ Status set to '{trans_name}' (transition_id: {trans_id})")
+                else:
+                    print(f"         ⚠ Transition '{trans_name}' thất bại (HTTP {post_res.status_code}): {post_res.text[:150]}")
             else:
-                print(f"         ⚠ Cần chuyển Done thủ công (HTTP {status_res.status_code})")
+                avail = [t.get('name') for t in transitions]
+                print(f"         ⚠ Không tìm thấy transition Done/Review Approved/In Progress. Có: {avail}")
+        else:
+            print(f"         ⚠ Không lấy được transitions (HTTP {trans_res.status_code})")
     except Exception as e:
-        print(f"         ⚠ Cần chuyển Done thủ công: {str(e)}")
+        print(f"         ⚠ Lỗi chuyển trạng thái: {str(e)}")
 
     # 4. Thêm issue vào Daily Time Allocation
     update_status("running", idx - 1, total, f"Task {idx}/{total}: Đang đưa issue vào bảng phân bổ thời gian...")
