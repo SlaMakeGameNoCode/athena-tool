@@ -267,25 +267,48 @@ TUYỆT ĐỐI KHÔNG TRẢ LỜI GIAO TIẾP, GIẢI THÍCH HOẶC GHI CHÚ GÌ
 def fix_kpi_tasks(tasks, provider, api_key, user_name="Chu Văn Mai", user_role="PM"):
     """
     Takes a list of failed KPI tasks: [{"title": "...", "reason": "...", "suggestion": "..."}]
-    Returns a list of fixed summaries using AI, based strictly on the reasons.
+    Returns a list of fixed summaries using AI, based strictly on Rule B naming conventions.
     """
     base_prompt = """Bạn là trợ lý ảo PM.
-Nhiệm vụ của bạn là sửa lại Tiêu đề/Summary của các đầu việc bị đánh giá là "Không đạt".
-Hãy tuân thủ tuyệt đối Rule M trong tài liệu đính kèm.
+Nhiệm vụ của bạn là sửa lại Tiêu đề/Summary của các đầu việc bị đánh giá là "Không đạt" trên hệ thống KPI.
 
-TRẢ VỀ ĐÚNG ĐỊNH DẠNG JSON ARRAY CÁC CHUỖI VĂN BẢN (chỉ chứa nội dung đã được sửa). KHÔNG CÓ TEXT NÀO KHÁC.
+## QUY TẮC BẮT BUỘC KHI SỬA TIÊU ĐỀ (Rule B):
+1. **Công thức đặt tên**: `[Làm gì / Hành động cụ thể] - [Để làm gì / Mục tiêu cụ thể]`
+2. **Độ dài tối thiểu**: Tiêu đề phải dài ít nhất **50 ký tự** (kể cả khoảng trắng). Mở rộng phần hành động và mục tiêu nếu cần.
+3. **Viết bằng tiếng Việt** (trừ các thuật ngữ kỹ thuật tiếng Anh phổ biến).
+4. **Ví dụ đúng**:
+   - "Khắc phục lỗi hiển thị ảnh sản phẩm IAP trên iOS - Đảm bảo thông tin gói IAP xuất hiện đầy đủ và chính xác trên App Store"
+   - "Thiết kế và triển khai giao diện màn hình đăng nhập - Phục vụ tính năng xác thực người dùng trên ứng dụng mobile"
+   - "Kiểm tra và xác thực tính toàn vẹn UI/UX cùng logic vận hành - Đảm bảo hệ thống Pet hoạt động ổn định sau khi tích hợp"
+
+## TUYỆT ĐỐI KHÔNG ĐƯỢC LÀM:
+- **KHÔNG ĐƯỢC** sử dụng nội dung gợi ý của hệ thống KPI (ví dụ: "Viết lại summary dài hơn, ví dụ: ...") làm tiêu đề mới. Đó chỉ là chỉ dẫn meta, KHÔNG PHẢI nội dung tiêu đề.
+- **KHÔNG ĐƯỢC** trả về tiêu đề bằng 100% tiếng Anh. Phải dùng tiếng Việt hoặc mix tiếng Việt + thuật ngữ kỹ thuật.
+- **KHÔNG ĐƯỢC** copy nguyên văn trường "Gợi ý" vào kết quả.
+- **KHÔNG ĐƯỢC** bắt đầu tiêu đề bằng "Viết lại...", "Sửa lại...", "Cần viết..." hoặc các chỉ dẫn meta tương tự.
+
+## CÁCH XỬ LÝ:
+- Đọc tiêu đề gốc (có chứa JIRA Key ở đầu, ví dụ "GAE-1907 - ..."). Phần sau dấu " - " là nội dung summary thực tế.
+- Dựa trên NỘI DUNG GỐC CỦA TIÊU ĐỀ, viết lại theo đúng công thức Rule B.
+- GIỮ NGUYÊN ý nghĩa công việc gốc, chỉ mở rộng và format lại cho đúng chuẩn.
+- KHÔNG thêm JIRA Key vào kết quả trả về (chỉ trả về phần summary thuần).
+
+TRẢ VỀ ĐÚNG ĐỊNH DẠNG JSON ARRAY CÁC CHUỖI VĂN BẢN (chỉ chứa nội dung summary đã được sửa). KHÔNG CÓ TEXT NÀO KHÁC.
 """
     system_prompt = base_prompt + get_system_rules(user_name, user_role)
     
     import json
-    user_prompt = "Dưới đây là danh sách các task Không đạt:\n\n"
+    user_prompt = "Dưới đây là danh sách các task Không đạt cần sửa tiêu đề:\n\n"
     for i, t in enumerate(tasks):
+        # Tách JIRA key khỏi title để hiển thị rõ ràng
+        raw_title = t.get('title', '')
         user_prompt += f"Task {i+1}:\n"
-        user_prompt += f"- Tiêu đề gốc: {t.get('title')}\n"
+        user_prompt += f"- Tiêu đề gốc (gồm JIRA Key): {raw_title}\n"
         user_prompt += f"- Lý do chưa đạt: {t.get('reason')}\n"
-        user_prompt += f"- Gợi ý (BỎ QUA): {t.get('suggestion')}\n\n"
+        user_prompt += f"- [KHÔNG DÙNG LÀM TIÊU ĐỀ] Gợi ý hệ thống (chỉ tham khảo): {t.get('suggestion')}\n\n"
         
-    user_prompt += "Hãy trả về một mảng JSON các chuỗi (string) tương ứng với nội dung đã được sửa cho từng task theo đúng thứ tự."
+    user_prompt += """Hãy trả về một mảng JSON các chuỗi (string) tương ứng với TIÊU ĐỀ ĐÃ ĐƯỢC SỬA cho từng task theo đúng thứ tự.
+LƯU Ý: Mỗi chuỗi trả về phải là tiêu đề hoàn chỉnh theo Rule B (>= 50 ký tự, format [Hành động] - [Mục tiêu]), KHÔNG chứa JIRA Key, KHÔNG chứa gợi ý meta."""
     
     result = call_ai_provider(provider, api_key, system_prompt, user_prompt)
     
@@ -299,10 +322,23 @@ TRẢ VỀ ĐÚNG ĐỊNH DẠNG JSON ARRAY CÁC CHUỖI VĂN BẢN (chỉ chứ
         
     try:
         fixed_list = json.loads(result.strip())
-        # Cập nhật kết quả vào tasks
+        
+        # Validation: kiểm tra output AI không phải là suggestion text
+        INVALID_PREFIXES = ["viết lại", "sửa lại", "cần viết", "write a longer", "rewrite"]
+        
         for i, t in enumerate(tasks):
             if i < len(fixed_list):
-                t["fixed_title"] = fixed_list[i]
+                fixed = fixed_list[i]
+                # Kiểm tra xem AI có copy suggestion text không
+                fixed_lower = fixed.lower().strip()
+                is_invalid = any(fixed_lower.startswith(prefix) for prefix in INVALID_PREFIXES)
+                
+                if is_invalid:
+                    # AI đã copy suggestion thay vì sửa → giữ nguyên tiêu đề gốc
+                    print(f"[WARN] Task {i+1}: AI trả về gợi ý meta thay vì tiêu đề. Giữ nguyên tiêu đề gốc.")
+                    t["fixed_title"] = t["title"]
+                else:
+                    t["fixed_title"] = fixed
             else:
                 t["fixed_title"] = t["title"]
         return tasks

@@ -1,5 +1,5 @@
 {
-  "version": "1.0.47",
+  "version": "1.0.48",
   "released_at": "2026-06-17",
-  "changelog": "Bản cập nhật v1.0.47: Sửa lỗi thiếu import requests trong submitter.py, chuyển logic set status Done sang dùng Transitions API đúng chuẩn WorkAI (GET+POST /issues/{id}/transitions), thứ tự ưu tiên Done > Review Approved > In Progress."
+  "changelog": "Bản cập nhật v1.0.48: Sửa lỗi AI sửa KPI lấy gợi ý hệ thống làm tiêu đề - viết lại prompt AI tuân thủ Rule B (>= 50 ký tự, format [Hành động] - [Mục tiêu]), thêm validation chống copy suggestion meta."
 }
