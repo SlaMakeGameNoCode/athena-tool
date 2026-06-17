@@ -1,7 +1,7 @@
 {
-  "version": "1.0.43",
+  "version": "1.0.44",
   "released_at": "2026-06-17",
-  "changelog": "Bản cập nhật v1.0.43: Thay thế log Playwright cũ bằng log thời gian thực qua API, tối ưu hóa cào nạp 23+ đầu việc KPI lỗi và tự động vá lỗi cập nhật."
+  "changelog": "Bản cập nhật v1.0.44: Hỗ trợ xuất file kpi_update_result.log chi tiết ghi nhận từng bước cập nhật Summary, AI suggest description và kết quả API phản hồi."
 }
 
 

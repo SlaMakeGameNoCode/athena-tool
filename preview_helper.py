@@ -118,6 +118,22 @@ def do_update(api: WorkAIAPI, tasks):
     
     import requests
     
+    log_path = "kpi_update_result.log"
+    # Khởi tạo hoặc xóa log cũ
+    try:
+        with open(log_path, "w", encoding="utf-8") as f:
+            f.write(f"=== BẮT ĐẦU TIẾN TRÌNH CẬP NHẬT KPI ({total} ĐẦU VIỆC) ===\n\n")
+    except Exception as le:
+        print(f"⚠ Không thể tạo file log: {le}")
+
+    def append_log(msg):
+        print(msg)
+        try:
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(msg + "\n")
+        except:
+            pass
+
     for idx, t in enumerate(tasks, 1):
         key = t.get("issue_key")
         title = t.get("title")
@@ -125,10 +141,11 @@ def do_update(api: WorkAIAPI, tasks):
         description_valid = t.get("description_valid", True)
         
         if not key:
-            print(f"[{idx}/{total}] Bỏ qua task không có issue_key")
+            append_log(f"[{idx}/{total}] Bỏ qua task không có issue_key")
             continue
             
-        print(f"[{idx}/{total}] Đang cập nhật {key}...")
+        append_log(f"[{idx}/{total}] Đang xử lý issue: {key}")
+        append_log(f"   - Trạng thái lỗi: Summary Valid={summary_valid}, Description Valid={description_valid}")
         update_status("running", idx - 1, total, f"Đang cập nhật công việc {idx}/{total}: {key}...")
         
         # Lấy ID của issue (để fallback nếu cập nhật qua key thất bại)
@@ -145,40 +162,48 @@ def do_update(api: WorkAIAPI, tasks):
                             break
                 except Exception:
                     pass
+        append_log(f"   - Mã ID số của JIRA: '{issue_id}'")
 
         # ── BƯỚC 1: SỬA LỖI SUMMARY (NẾU CÓ) ──
         # Nếu summary không hợp lệ hoặc title bị thay đổi, tiến hành sửa
-        # Ở tab sửa KPI, title gửi sang luôn là title mới của task.
         current_title = title
         if not summary_valid and title:
-            print(f"         → Bước 1: Sửa lại Summary...")
+            append_log(f"   → [Bước 1/2] Sửa Summary lỗi. Tiêu đề mới đề xuất: \"{title}\"")
             payload = {"summary": title}
             url = f"{api.base_url}/issues/{key}"
+            
+            # Ghi nhận payload gửi đi
+            append_log(f"     * Gửi PUT đến {url} | Payload: {json.dumps(payload, ensure_ascii=False)}")
             try:
                 response = requests.put(url, json=payload, headers=api.headers, timeout=15)
+                append_log(f"     * Phản hồi qua Key: HTTP {response.status_code} | Body: {response.text[:150]}")
+                
                 if response.status_code not in (200, 204) and issue_id:
-                    # Fallback qua ID
-                    response = requests.put(f"{api.base_url}/issues/{issue_id}", json=payload, headers=api.headers, timeout=15)
+                    fallback_url = f"{api.base_url}/issues/{issue_id}"
+                    append_log(f"     * Lỗi Key. Chuyển sang Fallback dùng ID. Gửi PUT đến {fallback_url}")
+                    response = requests.put(fallback_url, json=payload, headers=api.headers, timeout=15)
+                    append_log(f"     * Phản hồi qua ID: HTTP {response.status_code} | Body: {response.text[:150]}")
                 
                 if response.status_code in (200, 204):
-                    print("         ✓ Sửa Summary thành công")
+                    append_log("     ✓ Kết quả: Sửa Summary THÀNH CÔNG")
                 else:
-                    print(f"         ⚠ Sửa Summary thất bại (HTTP {response.status_code})")
+                    append_log(f"     ⚠ Kết quả: Sửa Summary THẤT BẠI (HTTP {response.status_code})")
             except Exception as e:
-                print(f"         ⚠ Lỗi sửa Summary: {e}")
+                append_log(f"     ⚠ Lỗi kết nối khi sửa Summary: {e}")
+        else:
+            append_log("   → [Bước 1/2] Bỏ qua sửa Summary (Tiêu đề đã đạt chuẩn hoặc không đổi)")
 
         # ── BƯỚC 2: SỬA LỖI DESCRIPTION (NẾU CÓ) ──
-        # Nếu mô tả trống hoặc không đạt yêu cầu
         if not description_valid:
-            print(f"         → Bước 2: Bổ sung Description (Dùng AI suggest)...")
-            
-            # 1. Gọi API suggest description của WorkAI bằng Summary mới
+            append_log(f"   → [Bước 2/2] Bổ sung Description. Gọi API suggest-description của WorkAI...")
             project_key = key.split("-")[0] if "-" in key else "GRPG"
+            
             suggest_ok, suggest_data = api.suggest_description(project_key, current_title)
             
             if suggest_ok:
                 desc = suggest_data.get("description", "")
                 ac = suggest_data.get("acceptance_criteria", "")
+                append_log(f"     * Đã lấy gợi ý từ AI thành công. Mô tả nhận được dài {len(desc)} ký tự.")
                 
                 if desc:
                     payload = {
@@ -186,25 +211,33 @@ def do_update(api: WorkAIAPI, tasks):
                         "acceptance_criteria": ac
                     }
                     url = f"{api.base_url}/issues/{key}"
+                    append_log(f"     * Gửi PUT cập nhật mô tả đến {url}")
                     try:
                         response = requests.put(url, json=payload, headers=api.headers, timeout=15)
+                        append_log(f"     * Phản hồi qua Key: HTTP {response.status_code} | Body: {response.text[:150]}")
+                        
                         if response.status_code not in (200, 204) and issue_id:
-                            # Fallback qua ID
-                            response = requests.put(f"{api.base_url}/issues/{issue_id}", json=payload, headers=api.headers, timeout=15)
+                            fallback_url = f"{api.base_url}/issues/{issue_id}"
+                            append_log(f"     * Lỗi Key. Chuyển sang Fallback dùng ID. Gửi PUT đến {fallback_url}")
+                            response = requests.put(fallback_url, json=payload, headers=api.headers, timeout=15)
+                            append_log(f"     * Phản hồi qua ID: HTTP {response.status_code} | Body: {response.text[:150]}")
                         
                         if response.status_code in (200, 204):
-                            print("         ✓ Bổ sung Description thành công")
+                            append_log("     ✓ Kết quả: Bổ sung Description THÀNH CÔNG")
                         else:
-                            print(f"         ⚠ Bổ sung Description thất bại (HTTP {response.status_code})")
+                            append_log(f"     ⚠ Kết quả: Bổ sung Description THẤT BẠI (HTTP {response.status_code})")
                     except Exception as e:
-                        print(f"         ⚠ Lỗi bổ sung Description: {e}")
+                        append_log(f"     ⚠ Lỗi kết nối khi cập nhật Description: {e}")
                 else:
-                    print("         ⚠ API suggest-description trả về mô tả trống.")
+                    append_log("     ⚠ API suggest-description trả về mô tả trống.")
             else:
-                print(f"         ⚠ Không thể lấy gợi ý mô tả từ WorkAI: {suggest_data}")
+                append_log(f"     ⚠ Không thể lấy gợi ý mô tả từ WorkAI: {suggest_data}")
+        else:
+            append_log("   → [Bước 2/2] Bỏ qua bổ sung Description (Mô tả đã đạt chuẩn)")
 
-        print()
+        append_log("")
             
+    append_log("Đã hoàn thành cập nhật tất cả công việc lên WorkAI!")
     update_status("success", total, total, "Đã hoàn thành cập nhật các công việc lên WorkAI!")
     print("[SUCCESS] Hoàn thành cập nhật.")
 
