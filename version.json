@@ -1,7 +1,7 @@
 {
-  "version": "1.0.42",
+  "version": "1.0.43",
   "released_at": "2026-06-17",
-  "changelog": "Bản cập nhật v1.0.42: Sửa lỗi cập nhật KPI thất bại (HTTP 500 khi update qua JIRA Key) bằng cách tự động đồng bộ và sử dụng ID số trực tiếp từ hệ thống WorkAI."
+  "changelog": "Bản cập nhật v1.0.43: Thay thế log Playwright cũ bằng log thời gian thực qua API, tối ưu hóa cào nạp 23+ đầu việc KPI lỗi và tự động vá lỗi cập nhật."
 }
 
 

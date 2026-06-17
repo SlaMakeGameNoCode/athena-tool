@@ -9,7 +9,7 @@ import os
 import sys
 import json
 
-APP_VERSION = "1.0.42"
+APP_VERSION = "1.0.43"
 
 app = FastAPI(title="Athena Assistant App")
 
@@ -378,9 +378,22 @@ def scan_and_fix_kpi():
         from workai_api import WorkAIAPI
         from ai_processor import fix_kpi_tasks
         
+        log_file = os.path.join(BASE_DIR, "kpi_scan.log")
+        def write_kpi_log(lines_list):
+            try:
+                with open(log_file, "w", encoding="utf-8") as lf:
+                    lf.write("\n".join(lines_list) + "\n")
+            except:
+                pass
+
+        logs = ["Đang đăng nhập vào WorkAI qua API...", "Đăng nhập thành công! v1.0.42"]
+        write_kpi_log(logs)
+
         api = WorkAIAPI()
         login_ok, login_msg = api.login(username, password)
         if not login_ok:
+            logs.append(f"Lỗi đăng nhập: {login_msg}")
+            write_kpi_log(logs)
             raise HTTPException(status_code=400, detail=f"Không thể đăng nhập WorkAI: {login_msg}")
             
         # 1. Quét KPI qua API
@@ -389,13 +402,21 @@ def scan_and_fix_kpi():
         year = now.year
         month = now.month
         
+        logs.append(f"Đang quét dữ liệu KPI cho tháng {month}/{year}...")
+        write_kpi_log(logs)
+
         success, kpi_res = api.get_kpi_compliance(year, month)
         if not success:
+            logs.append(f"Lỗi lấy KPI compliance: {str(kpi_res)}")
+            write_kpi_log(logs)
             raise HTTPException(status_code=500, detail=f"Lỗi lấy KPI compliance: {str(kpi_res)}")
             
         # Parse danh sách KPI lỗi giống format cũ: [{"title": "JIRA_KEY - SUMMARY", "reason": "...", "suggestion": "..."}]
         raw_kpi_tasks = []
         
+        logs.append("Đang phân tích cấu trúc phản hồi từ WorkAI...")
+        write_kpi_log(logs)
+
         # Mở rộng thông tin KPI score để mapping nếu kpi compliance không đủ thông tin chi tiết
         score_success, score_res = api.get_kpi_score(year, month)
         
@@ -485,6 +506,10 @@ def scan_and_fix_kpi():
         with open(kpi_file, "w", encoding="utf-8") as f:
             json.dump(fixed_tasks, f, ensure_ascii=False, indent=2)
             
+        logs.append(f"Hoàn thành quét KPI! Tổng số đầu việc bị lỗi thu thập được: {len(raw_kpi_tasks)}")
+        logs.append("Đã hoàn thành sửa lỗi KPI bằng AI!")
+        write_kpi_log(logs)
+
         return {"status": "success", "tasks": fixed_tasks}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
