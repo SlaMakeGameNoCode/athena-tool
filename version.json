@@ -1,6 +1,7 @@
 {
-  "version": "1.0.39",
+  "version": "1.0.40",
   "released_at": "2026-06-17",
-  "changelog": "Bản cập nhật v1.0.39: Tự động kiểm tra file hệ thống khi startup & tự động phân bổ giờ làm việc đều 8.0h cho các đầu việc qua API."
+  "changelog": "Bản cập nhật v1.0.40: Cải tiến quét sửa KPI qua API, hỗ trợ sửa Summary lỗi và tự động dùng AI suggest bổ sung Description tuần tự."
 }
+
 
