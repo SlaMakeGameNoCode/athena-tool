@@ -116,11 +116,13 @@ def do_update(api: WorkAIAPI, tasks):
     total = len(tasks)
     print(f"Bắt đầu cập nhật {total} công việc...")
     
+    import requests
+    
     for idx, t in enumerate(tasks, 1):
         key = t.get("issue_key")
         title = t.get("title")
-        description = t.get("description")
-        acceptance_criteria = t.get("acceptance_criteria")
+        summary_valid = t.get("summary_valid", True)
+        description_valid = t.get("description_valid", True)
         
         if not key:
             print(f"[{idx}/{total}] Bỏ qua task không có issue_key")
@@ -129,49 +131,82 @@ def do_update(api: WorkAIAPI, tasks):
         print(f"[{idx}/{total}] Đang cập nhật {key}...")
         update_status("running", idx - 1, total, f"Đang cập nhật công việc {idx}/{total}: {key}...")
         
-        # Ở đây chúng ta gọi API cập nhật công việc của WorkAI
-        # Đầu tiên cần lấy id của issue từ key (nếu chưa có)
-        # Tạm thời chúng ta giả định URL API update: PUT /api/issues/{key} hoặc {id}
-        # Thử PUT cập nhật thông tin qua API endpoint cập nhật của WorkAI
-        url = f"{api.base_url}/issues/{key}"
-        payload = {}
-        if title:
-            payload["summary"] = title
-        if description is not None:
-            payload["description"] = description
-        if acceptance_criteria is not None:
-            payload["acceptance_criteria"] = acceptance_criteria
+        # Lấy ID của issue (để fallback nếu cập nhật qua key thất bại)
+        issue_id = ""
+        submitted_file = "submitted.json"
+        if os.path.exists(submitted_file):
+            try:
+                with open(submitted_file, "r", encoding="utf-8") as sf:
+                    submitted = json.load(sf)
+                for fp, val in submitted.items():
+                    if val.get("issue_key") == key:
+                        issue_id = val.get("issue_id") or val.get("id") or ""
+                        break
+            except Exception:
+                pass
+
+        # ── BƯỚC 1: SỬA LỖI SUMMARY (NẾU CÓ) ──
+        # Nếu summary không hợp lệ hoặc title bị thay đổi, tiến hành sửa
+        # Ở tab sửa KPI, title gửi sang luôn là title mới của task.
+        current_title = title
+        if not summary_valid and title:
+            print(f"         → Bước 1: Sửa lại Summary...")
+            payload = {"summary": title}
+            url = f"{api.base_url}/issues/{key}"
+            try:
+                response = requests.put(url, json=payload, headers=api.headers, timeout=15)
+                if response.status_code not in (200, 204) and issue_id:
+                    # Fallback qua ID
+                    response = requests.put(f"{api.base_url}/issues/{issue_id}", json=payload, headers=api.headers, timeout=15)
+                
+                if response.status_code in (200, 204):
+                    print("         ✓ Sửa Summary thành công")
+                else:
+                    print(f"         ⚠ Sửa Summary thất bại (HTTP {response.status_code})")
+            except Exception as e:
+                print(f"         ⚠ Lỗi sửa Summary: {e}")
+
+        # ── BƯỚC 2: SỬA LỖI DESCRIPTION (NẾU CÓ) ──
+        # Nếu mô tả trống hoặc không đạt yêu cầu
+        if not description_valid:
+            print(f"         → Bước 2: Bổ sung Description (Dùng AI suggest)...")
             
-        try:
-            import requests
-            response = requests.put(url, json=payload, headers=api.headers, timeout=15)
-            # Nếu key là JIRA key và API yêu cầu ID, thử endpoint với key trước
-            if response.status_code not in (200, 204):
-                # Fallback: Thử với ID nằm trong submitted.json nếu có
-                submitted_file = "submitted.json"
-                if os.path.exists(submitted_file):
-                    with open(submitted_file, "r", encoding="utf-8") as sf:
-                        submitted = json.load(sf)
-                    # Tìm issue_id
-                    issue_id = ""
-                    for fp, val in submitted.items():
-                        if val.get("issue_key") == key:
-                            issue_id = val.get("issue_id") or val.get("id") or ""
-                            break
-                    if issue_id:
-                        response_id = requests.put(f"{api.base_url}/issues/{issue_id}", json=payload, headers=api.headers, timeout=15)
-                        if response_id.status_code in (200, 204):
-                            print(f"         ✓ Cập nhật thành công {key} (qua ID)")
-                            continue
-                raise Exception(f"HTTP {response.status_code}: {response.text}")
+            # 1. Gọi API suggest description của WorkAI bằng Summary mới
+            project_key = key.split("-")[0] if "-" in key else "GRPG"
+            suggest_ok, suggest_data = api.suggest_description(project_key, current_title)
+            
+            if suggest_ok:
+                desc = suggest_data.get("description", "")
+                ac = suggest_data.get("acceptance_criteria", "")
+                
+                if desc:
+                    payload = {
+                        "description": desc,
+                        "acceptance_criteria": ac
+                    }
+                    url = f"{api.base_url}/issues/{key}"
+                    try:
+                        response = requests.put(url, json=payload, headers=api.headers, timeout=15)
+                        if response.status_code not in (200, 204) and issue_id:
+                            # Fallback qua ID
+                            response = requests.put(f"{api.base_url}/issues/{issue_id}", json=payload, headers=api.headers, timeout=15)
+                        
+                        if response.status_code in (200, 204):
+                            print("         ✓ Bổ sung Description thành công")
+                        else:
+                            print(f"         ⚠ Bổ sung Description thất bại (HTTP {response.status_code})")
+                    except Exception as e:
+                        print(f"         ⚠ Lỗi bổ sung Description: {e}")
+                else:
+                    print("         ⚠ API suggest-description trả về mô tả trống.")
             else:
-                print(f"         ✓ Cập nhật thành công {key}")
-        except Exception as e:
-            print(f"         ✗ Lỗi cập nhật: {str(e)}")
-            # Ghi nhận lỗi nhưng vẫn cho chạy tiếp
+                print(f"         ⚠ Không thể lấy gợi ý mô tả từ WorkAI: {suggest_data}")
+
+        print()
             
     update_status("success", total, total, "Đã hoàn thành cập nhật các công việc lên WorkAI!")
     print("[SUCCESS] Hoàn thành cập nhật.")
+
 
 def main():
     parser = argparse.ArgumentParser(description="WorkAI Preview Helper (API mode)")

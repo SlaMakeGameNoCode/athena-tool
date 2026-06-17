@@ -451,7 +451,9 @@ def scan_and_fix_kpi():
                 raw_kpi_tasks.append({
                     "title": title,
                     "reason": reason,
-                    "suggestion": suggestion
+                    "suggestion": suggestion,
+                    "summary_valid": item.get("summary_valid", True),
+                    "description_valid": item.get("description_valid", True)
                 })
                 
         if not raw_kpi_tasks:
@@ -470,6 +472,12 @@ def scan_and_fix_kpi():
         
         fixed_tasks = fix_kpi_tasks(raw_kpi_tasks, provider, api_key, user_name, user_role)
         
+        # Đồng bộ thêm các cờ validation từ raw_kpi_tasks sang fixed_tasks
+        for i, t in enumerate(fixed_tasks):
+            if i < len(raw_kpi_tasks):
+                t["summary_valid"] = raw_kpi_tasks[i].get("summary_valid", True)
+                t["description_valid"] = raw_kpi_tasks[i].get("description_valid", True)
+
         # Lưu vào saved_kpi_tasks.json
         kpi_file = os.path.join(BASE_DIR, "saved_kpi_tasks.json")
         with open(kpi_file, "w", encoding="utf-8") as f:
@@ -487,6 +495,8 @@ def kpi_update(tasks: list = Body(...)):
         for t in tasks:
             title = t.get("title", "")
             fixed_title = t.get("fixed_title", "")
+            summary_valid = t.get("summary_valid", True)
+            description_valid = t.get("description_valid", True)
             if not fixed_title:
                 fixed_title = title
             
@@ -505,7 +515,9 @@ def kpi_update(tasks: list = Body(...)):
                     "issue_key": issue_key,
                     "title": clean_title,
                     "description": None,
-                    "acceptance_criteria": None
+                    "acceptance_criteria": None,
+                    "summary_valid": summary_valid,
+                    "description_valid": description_valid
                 })
         if not formatted_tasks:
             raise HTTPException(status_code=400, detail="Không tìm thấy JIRA key hợp lệ trong các đầu việc.")
@@ -531,6 +543,7 @@ def kpi_update(tasks: list = Body(...)):
         return {"status": "success", "message": "Tiến trình cập nhật KPI đã bắt đầu."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/setup")
 def save_setup(data: dict):
