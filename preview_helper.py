@@ -118,7 +118,9 @@ def do_update(api: WorkAIAPI, tasks):
     
     import requests
     
-    log_path = "kpi_update_result.log"
+    import os
+    base_dir = os.path.dirname(os.path.abspath(__file__)) if not getattr(sys, 'frozen', False) else os.path.dirname(sys.executable)
+    log_path = os.path.join(base_dir, "kpi_update_result.log")
     # Khởi tạo hoặc xóa log cũ
     try:
         with open(log_path, "w", encoding="utf-8") as f:
