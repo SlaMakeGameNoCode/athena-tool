@@ -1,7 +1,5 @@
 {
-  "version": "1.0.45",
+  "version": "1.0.46",
   "released_at": "2026-06-17",
-  "changelog": "Bản cập nhật v1.0.45: Tối ưu hóa đường dẫn tuyệt đối xuất file kpi_update_result.log đảm bảo ghi nhận kết quả lưu trực tiếp trong thư mục Tool."
+  "changelog": "Bản cập nhật v1.0.46: Sửa lỗi KPI update hoàn toàn - sửa sai đường dẫn API endpoint (thiếu /key/), chuyển từ subprocess sang thread trực tiếp, thêm log chi tiết mọi request/response vào kpi_update_result.log."
 }
-
-

@@ -9,7 +9,7 @@ import os
 import sys
 import json
 
-APP_VERSION = "1.0.45"
+APP_VERSION = "1.0.46"
 
 app = FastAPI(title="Athena Assistant App")
 
@@ -550,7 +550,7 @@ def kpi_update(tasks: list = Body(...)):
         if not formatted_tasks:
             raise HTTPException(status_code=400, detail="Không tìm thấy JIRA key hợp lệ trong các đầu việc.")
         
-        # Write to the preview tasks edit file
+        # Write to the preview tasks edit file (for reference)
         edit_file = os.path.join(BASE_DIR, "preview_tasks_edit.json")
         with open(edit_file, "w", encoding="utf-8") as f:
             json.dump(formatted_tasks, f, ensure_ascii=False, indent=2)
@@ -565,12 +565,287 @@ def kpi_update(tasks: list = Body(...)):
                 "msg": "Đang chuẩn bị cập nhật KPI lên WorkAI..."
             }, f, ensure_ascii=False, indent=2)
         
-        # Start the background thread
-        thread = threading.Thread(target=run_preview_update_process, daemon=True)
+        # Start the background thread — chạy trực tiếp trong process thay vì subprocess
+        thread = threading.Thread(target=run_kpi_update_direct, args=(formatted_tasks,), daemon=True)
         thread.start()
         return {"status": "success", "message": "Tiến trình cập nhật KPI đã bắt đầu."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+def run_kpi_update_direct(tasks):
+    """
+    Chạy trực tiếp logic cập nhật KPI trong thread (không dùng subprocess).
+    Ghi log chi tiết mỗi request/response vào kpi_update_result.log.
+    Luồng:
+      Bước 1: Sửa Summary nếu summary_valid == false
+      Bước 2: Bổ sung Description nếu description_valid == false (dùng AI suggest)
+    """
+    import requests as http_requests
+    import datetime
+
+    log_path = os.path.join(BASE_DIR, "kpi_update_result.log")
+    status_file = os.path.join(BASE_DIR, "preview_status.json")
+    total = len(tasks)
+
+    def write_log(msg):
+        try:
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(msg + "\n")
+        except:
+            pass
+
+    def update_status(status, current, total_count, msg):
+        try:
+            with open(status_file, "w", encoding="utf-8") as f:
+                json.dump({"status": status, "current": current, "total": total_count, "msg": msg}, f, ensure_ascii=False, indent=2)
+        except:
+            pass
+
+    # Khởi tạo log file mới
+    try:
+        with open(log_path, "w", encoding="utf-8") as f:
+            f.write(f"=== BẮT ĐẦU CẬP NHẬT KPI — {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===\n")
+            f.write(f"Tổng số đầu việc cần xử lý: {total}\n")
+            f.write(f"App Version: {APP_VERSION}\n\n")
+    except Exception as le:
+        print(f"⚠ Không thể tạo file log: {le}")
+
+    # Đăng nhập WorkAI
+    try:
+        config = load_config()
+        username = config.get("workai_user", "")
+        password = config.get("workai_pass", "")
+        if not username or not password:
+            env_path = os.path.join(BASE_DIR, ".env")
+            if os.path.exists(env_path):
+                with open(env_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        if line.startswith("WORKAI_USERNAME="):
+                            username = line.split("=", 1)[1].strip()
+                        elif line.startswith("WORKAI_PASSWORD="):
+                            password = line.split("=", 1)[1].strip()
+
+        if not username or not password:
+            write_log("❌ LỖI: Thiếu thông tin tài khoản WorkAI. Dừng cập nhật.")
+            update_status("error", 0, total, "Thiếu thông tin tài khoản WorkAI.")
+            return
+
+        from workai_api import WorkAIAPI
+        api = WorkAIAPI()
+        login_ok, login_msg = api.login(username, password)
+        if not login_ok:
+            write_log(f"❌ LỖI: Đăng nhập WorkAI thất bại: {login_msg}")
+            update_status("error", 0, total, f"Đăng nhập thất bại: {login_msg}")
+            return
+
+        write_log(f"✓ Đăng nhập WorkAI thành công. User: {username}\n")
+
+    except Exception as e:
+        write_log(f"❌ LỖI NGHIÊM TRỌNG khi đăng nhập: {str(e)}")
+        update_status("error", 0, total, f"Lỗi đăng nhập: {str(e)}")
+        return
+
+    # Xử lý từng task
+    success_count = 0
+    fail_count = 0
+
+    for idx, t in enumerate(tasks, 1):
+        key = t.get("issue_key", "")
+        title = t.get("title", "")
+        summary_valid = t.get("summary_valid", True)
+        description_valid = t.get("description_valid", True)
+        issue_id = t.get("id", "")
+
+        write_log(f"{'='*60}")
+        write_log(f"[{idx}/{total}] Issue: {key}")
+        write_log(f"  Tiêu đề mới (fixed): \"{title}\"")
+        write_log(f"  summary_valid={summary_valid}, description_valid={description_valid}")
+        write_log(f"  Numeric ID từ scan: \"{issue_id}\"")
+        update_status("running", idx - 1, total, f"Đang cập nhật {idx}/{total}: {key}...")
+
+        # --- Bước 0: Lấy thông tin issue từ WorkAI để xác nhận numeric ID ---
+        if not issue_id:
+            write_log(f"  → [Bước 0] Không có numeric ID. Gọi GET /api/issues/key/{key} để lấy...")
+            try:
+                get_url = f"{api.base_url}/issues/key/{key}"
+                write_log(f"    * GET {get_url}")
+                resp = http_requests.get(get_url, headers=api.headers, timeout=15)
+                write_log(f"    * Response: HTTP {resp.status_code}")
+                if resp.status_code == 200:
+                    resp_data = resp.json()
+                    # Thử lấy ID từ nhiều vị trí trong response
+                    if isinstance(resp_data, dict):
+                        issue_id = resp_data.get("id") or ""
+                        if not issue_id:
+                            data_obj = resp_data.get("data", {})
+                            if isinstance(data_obj, dict):
+                                issue_id = data_obj.get("id") or ""
+                    write_log(f"    * Trích xuất numeric ID: \"{issue_id}\"")
+                    write_log(f"    * Response body (200 ký tự đầu): {resp.text[:200]}")
+                else:
+                    write_log(f"    * Không thể lấy issue detail. Body: {resp.text[:200]}")
+            except Exception as e:
+                write_log(f"    * Lỗi GET issue detail: {e}")
+
+        task_ok = True
+
+        # --- BƯỚC 1: SỬA SUMMARY (nếu summary_valid == false) ---
+        if not summary_valid and title:
+            write_log(f"  → [Bước 1/2] Sửa Summary. Tiêu đề mới: \"{title}\"")
+            payload = {"summary": title}
+            updated_summary = False
+
+            # Thử 1: PUT /api/issues/key/{jira_key}
+            try:
+                url1 = f"{api.base_url}/issues/key/{key}"
+                write_log(f"    * Thử 1: PUT {url1}")
+                write_log(f"    * Payload: {json.dumps(payload, ensure_ascii=False)}")
+                resp = http_requests.put(url1, json=payload, headers=api.headers, timeout=15)
+                write_log(f"    * Response: HTTP {resp.status_code} | Body: {resp.text[:300]}")
+                if resp.status_code in (200, 204):
+                    updated_summary = True
+                    write_log(f"    ✓ Sửa Summary qua KEY thành công!")
+            except Exception as e:
+                write_log(f"    * Lỗi kết nối PUT qua key: {e}")
+
+            # Thử 2: PUT /api/issues/{numeric_id} nếu thử 1 thất bại
+            if not updated_summary and issue_id:
+                try:
+                    url2 = f"{api.base_url}/issues/{issue_id}"
+                    write_log(f"    * Thử 2 (fallback ID): PUT {url2}")
+                    resp = http_requests.put(url2, json=payload, headers=api.headers, timeout=15)
+                    write_log(f"    * Response: HTTP {resp.status_code} | Body: {resp.text[:300]}")
+                    if resp.status_code in (200, 204):
+                        updated_summary = True
+                        write_log(f"    ✓ Sửa Summary qua ID thành công!")
+                except Exception as e:
+                    write_log(f"    * Lỗi kết nối PUT qua ID: {e}")
+
+            # Thử 3: PATCH thay vì PUT nếu cả 2 đều thất bại
+            if not updated_summary and issue_id:
+                try:
+                    url3 = f"{api.base_url}/issues/{issue_id}"
+                    write_log(f"    * Thử 3 (PATCH): PATCH {url3}")
+                    resp = http_requests.patch(url3, json=payload, headers=api.headers, timeout=15)
+                    write_log(f"    * Response: HTTP {resp.status_code} | Body: {resp.text[:300]}")
+                    if resp.status_code in (200, 204):
+                        updated_summary = True
+                        write_log(f"    ✓ Sửa Summary qua PATCH thành công!")
+                except Exception as e:
+                    write_log(f"    * Lỗi kết nối PATCH: {e}")
+
+            if updated_summary:
+                write_log(f"  ✓ KẾT QUẢ BƯỚC 1: THÀNH CÔNG")
+            else:
+                write_log(f"  ⚠ KẾT QUẢ BƯỚC 1: THẤT BẠI (tất cả phương thức đều lỗi)")
+                task_ok = False
+        else:
+            write_log(f"  → [Bước 1/2] Bỏ qua (Summary đã đạt chuẩn)")
+
+        # --- BƯỚC 2: BỔ SUNG DESCRIPTION (nếu description_valid == false) ---
+        if not description_valid:
+            write_log(f"  → [Bước 2/2] Bổ sung Description qua AI suggest...")
+            project_key = key.split("-")[0] if "-" in key else "GRPG"
+
+            # Gọi suggest-description
+            try:
+                suggest_url = f"{api.base_url}/issues/quick-create/suggest-description"
+                suggest_payload = {
+                    "project_key": project_key,
+                    "summary": title,
+                    "description": title
+                }
+                write_log(f"    * POST {suggest_url}")
+                write_log(f"    * Payload: {json.dumps(suggest_payload, ensure_ascii=False)}")
+                resp = http_requests.post(suggest_url, json=suggest_payload, headers=api.headers, timeout=60)
+                write_log(f"    * Response: HTTP {resp.status_code} | Body (300 ký tự): {resp.text[:300]}")
+
+                desc = ""
+                ac = ""
+                if resp.status_code == 200:
+                    suggest_data = resp.json()
+                    if suggest_data.get("success"):
+                        data = suggest_data.get("data", {})
+                        desc = data.get("suggested_description", "") or data.get("description", "")
+                        ac = data.get("suggested_acceptance_criteria", "") or data.get("acceptance_criteria", "")
+                        write_log(f"    * AI gợi ý: description dài {len(desc)} ký tự, AC dài {len(ac)} ký tự")
+                    else:
+                        write_log(f"    * API suggest trả về success=false: {suggest_data.get('message', '')}")
+                else:
+                    write_log(f"    * API suggest thất bại với HTTP {resp.status_code}")
+
+                # Cập nhật description lên issue
+                if desc:
+                    desc_payload = {"description": desc, "acceptance_criteria": ac}
+                    updated_desc = False
+
+                    # Thử PUT qua key
+                    try:
+                        url_d1 = f"{api.base_url}/issues/key/{key}"
+                        write_log(f"    * Cập nhật Description — PUT {url_d1}")
+                        resp = http_requests.put(url_d1, json=desc_payload, headers=api.headers, timeout=15)
+                        write_log(f"    * Response: HTTP {resp.status_code} | Body: {resp.text[:300]}")
+                        if resp.status_code in (200, 204):
+                            updated_desc = True
+                            write_log(f"    ✓ Bổ sung Description qua KEY thành công!")
+                    except Exception as e:
+                        write_log(f"    * Lỗi PUT description qua key: {e}")
+
+                    # Fallback qua ID
+                    if not updated_desc and issue_id:
+                        try:
+                            url_d2 = f"{api.base_url}/issues/{issue_id}"
+                            write_log(f"    * Fallback Description — PUT {url_d2}")
+                            resp = http_requests.put(url_d2, json=desc_payload, headers=api.headers, timeout=15)
+                            write_log(f"    * Response: HTTP {resp.status_code} | Body: {resp.text[:300]}")
+                            if resp.status_code in (200, 204):
+                                updated_desc = True
+                                write_log(f"    ✓ Bổ sung Description qua ID thành công!")
+                        except Exception as e:
+                            write_log(f"    * Lỗi PUT description qua ID: {e}")
+
+                    # Fallback PATCH
+                    if not updated_desc and issue_id:
+                        try:
+                            url_d3 = f"{api.base_url}/issues/{issue_id}"
+                            write_log(f"    * Fallback Description — PATCH {url_d3}")
+                            resp = http_requests.patch(url_d3, json=desc_payload, headers=api.headers, timeout=15)
+                            write_log(f"    * Response: HTTP {resp.status_code} | Body: {resp.text[:300]}")
+                            if resp.status_code in (200, 204):
+                                updated_desc = True
+                                write_log(f"    ✓ Bổ sung Description qua PATCH thành công!")
+                        except Exception as e:
+                            write_log(f"    * Lỗi PATCH description: {e}")
+
+                    if updated_desc:
+                        write_log(f"  ✓ KẾT QUẢ BƯỚC 2: THÀNH CÔNG")
+                    else:
+                        write_log(f"  ⚠ KẾT QUẢ BƯỚC 2: THẤT BẠI")
+                        task_ok = False
+                else:
+                    write_log(f"  ⚠ Không có nội dung description từ AI suggest. Bỏ qua bước 2.")
+                    task_ok = False
+
+            except Exception as e:
+                write_log(f"    * Lỗi nghiêm trọng bước 2: {e}")
+                task_ok = False
+        else:
+            write_log(f"  → [Bước 2/2] Bỏ qua (Description đã đạt chuẩn)")
+
+        if task_ok:
+            success_count += 1
+        else:
+            fail_count += 1
+        write_log("")
+
+    # Tổng kết
+    write_log(f"{'='*60}")
+    write_log(f"=== KẾT THÚC CẬP NHẬT KPI — {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===")
+    write_log(f"Tổng: {total} | Thành công: {success_count} | Thất bại: {fail_count}")
+    write_log(f"File log: {log_path}")
+
+    update_status("success", total, total, f"Hoàn thành! Thành công: {success_count}/{total}, Thất bại: {fail_count}/{total}")
+    print(f"[KPI UPDATE] Hoàn thành. Thành công: {success_count}/{total}. Log: {log_path}")
 
 
 @app.post("/api/setup")
@@ -691,6 +966,19 @@ def get_kpi_content():
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
     return {"status": "success", "tasks": []}
+
+@app.get("/api/kpi/log")
+def get_kpi_update_log():
+    """Đọc file log chi tiết kết quả cập nhật KPI"""
+    log_file = os.path.join(BASE_DIR, "kpi_update_result.log")
+    if os.path.exists(log_file):
+        try:
+            with open(log_file, "r", encoding="utf-8") as f:
+                content = f.read()
+            return {"status": "success", "log": content}
+        except Exception as e:
+            return {"status": "error", "log": f"Lỗi đọc log: {str(e)}"}
+    return {"status": "empty", "log": "Chưa có file log. Hãy chạy cập nhật KPI trước."}
 
 @app.get("/api/kpi/status")
 def get_kpi_status():
