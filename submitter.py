@@ -132,7 +132,7 @@ def save_submitted(data):
         print(f"[WARNING] Failed to save submitted.json: {e}")
 
 
-def process_task(api: WorkAIAPI, task, idx, total):
+def process_task(api: WorkAIAPI, task, idx, total, hours_per_task=0.1):
     project = task.get("project", "RPG")
     title = task.get("title", "")
     pc = get_project_code(project)
@@ -188,6 +188,19 @@ def process_task(api: WorkAIAPI, task, idx, total):
                 print(f"         ⚠ Cần chuyển Done thủ công (HTTP {status_res.status_code})")
     except Exception as e:
         print(f"         ⚠ Cần chuyển Done thủ công: {str(e)}")
+
+    # 4. Thêm issue vào Daily Time Allocation
+    update_status("running", idx - 1, total, f"Task {idx}/{total}: Đang đưa issue vào bảng phân bổ thời gian...")
+    task_date = task.get("date", _time.strftime("%Y-%m-%d"))
+    alloc_ok, alloc_res = api.create_time_allocation(
+        issue_id=issue_id,
+        allocation_date=task_date,
+        planned_hours=hours_per_task
+    )
+    if alloc_ok:
+        print(f"         ✓ Added to Time Allocation ({hours_per_task}h)")
+    else:
+        print(f"         ⚠ Time Allocation failed: {alloc_res}")
 
     print()
     return created_key
@@ -246,13 +259,18 @@ def main():
         update_status("error", 0, total, f"Đăng nhập thất bại: {login_msg}")
         sys.exit(1)
 
+    # Chia đều 8h cho các task
+    total_hours = 8.0
+    hours_per_task = round(total_hours / total, 1)
+    print(f"  [Time Allocation] Auto distribution: {hours_per_task}h per task")
+
     ok = 0
     fail = 0
 
     for idx, task in enumerate(new_tasks, 1):
         fp = task_fingerprint(task)
         try:
-            created_key = process_task(api, task, idx, total)
+            created_key = process_task(api, task, idx, total, hours_per_task)
             ok += 1
             # Mark as submitted
             submitted[fp] = {
@@ -265,9 +283,10 @@ def main():
             save_submitted(submitted)
             update_status("running", idx, total, f"Đã hoàn thành Task {idx}/{total}")
         except Exception as e:
-            print(f"         ✗ Error: {e}\n")
+            print(f"         Epic Error: {e}\n")
             fail += 1
             update_status("error", idx - 1, total, f"Lỗi ở Task {idx}: {str(e)}")
+
 
     elapsed = _time.time() - start
     print(f"{'='*55}")

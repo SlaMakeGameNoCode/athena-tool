@@ -1,5 +1,6 @@
 {
-  "version": "1.0.38",
-  "released_at": "2026-06-16",
-  "changelog": "Bản cập nhật v1.0.38 để đồng bộ hóa đầy đủ các file thư viện mới (workai_api.py, sync_calendar.py, sync_gitlab.py) sang máy người dùng."
+  "version": "1.0.39",
+  "released_at": "2026-06-17",
+  "changelog": "Bản cập nhật v1.0.39: Tự động kiểm tra file hệ thống khi startup & tự động phân bổ giờ làm việc đều 8.0h cho các đầu việc qua API."
 }
+

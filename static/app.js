@@ -192,10 +192,32 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (changelog && data.changelog) changelog.textContent = data.changelog;
                 }
             }
+
+            // Check for missing files integrity
+            await checkFileIntegrity();
         } catch (e) {
             console.log('Không thể kiểm tra cập nhật:', e);
         }
     })();
+
+    async function checkFileIntegrity() {
+        try {
+            const res = await fetch('/api/update/check-files?t=' + Date.now());
+            const data = await res.json();
+            const integrityBanner = document.getElementById('integrity-banner');
+            const integrityInfo = document.getElementById('integrity-files-info');
+            if (data.has_missing && integrityBanner) {
+                integrityBanner.classList.remove('hidden');
+                if (integrityInfo) {
+                    integrityInfo.textContent = `Thiếu file/thư mục: ${data.missing_files.join(', ')}`;
+                }
+            } else if (integrityBanner) {
+                integrityBanner.classList.add('hidden');
+            }
+        } catch (e) {
+            console.log('Lỗi kiểm tra toàn vẹn file:', e);
+        }
+    }
 
     btnLogin.addEventListener('click', async () => {
         const user = document.getElementById('login-username').value;
@@ -1619,4 +1641,53 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+    // --- Integrity Update Button Handler ---
+    const btnIntegrityUpdate = document.getElementById('btn-integrity-update');
+    if (btnIntegrityUpdate) {
+        btnIntegrityUpdate.addEventListener('click', async () => {
+            const integrityBanner = document.getElementById('integrity-banner');
+            const progress = document.getElementById('update-progress');
+            if (integrityBanner) integrityBanner.classList.add('hidden');
+            if (progress) {
+                progress.querySelector('span').textContent = 'Đang tải các file bị thiếu...';
+                progress.classList.remove('hidden');
+            }
+
+            try {
+                const res = await fetch('/api/update/apply', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    if (progress) progress.querySelector('span').textContent = 'Đang khởi động lại...';
+                    // Wait for server to restart, then reload
+                    setTimeout(() => {
+                        let attempts = 0;
+                        const tryReload = setInterval(async () => {
+                            attempts++;
+                            try {
+                                const check = await fetch('/api/version');
+                                if (check.ok) {
+                                    clearInterval(tryReload);
+                                    window.location.reload();
+                                }
+                            } catch (e) {
+                                if (attempts > 20) {
+                                    clearInterval(tryReload);
+                                    alert('Cập nhật xong! Vui lòng mở lại ứng dụng.');
+                                }
+                            }
+                        }, 1000);
+                    }, 3000);
+                } else {
+                    alert('Lỗi cập nhật: ' + (data.message || 'Không rõ'));
+                    if (progress) progress.classList.add('hidden');
+                    if (integrityBanner) integrityBanner.classList.remove('hidden');
+                }
+            } catch (e) {
+                alert('Lỗi kết nối: ' + e.message);
+                if (progress) progress.classList.add('hidden');
+                if (integrityBanner) integrityBanner.classList.remove('hidden');
+            }
+        });
+    }
 });
+

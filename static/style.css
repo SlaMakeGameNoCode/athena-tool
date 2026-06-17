@@ -575,3 +575,57 @@ input:focus {
     box-shadow: 0 0 8px rgba(59, 130, 246, 0.4);
 }
 
+/* INTEGRITY WARNING BANNER */
+.integrity-banner {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(245, 158, 11, 0.15));
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    animation: slideDown 0.3s ease-out;
+}
+
+.integrity-banner-icon {
+    font-size: 1.2rem;
+}
+
+.integrity-banner-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.integrity-banner-text strong {
+    font-size: 0.85rem;
+    color: #ef4444;
+}
+
+.integrity-banner-text span {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.integrity-btn {
+    background: linear-gradient(135deg, #ef4444, #dc2626) !important;
+    color: white !important;
+    border: none !important;
+    padding: 6px 12px !important;
+    font-size: 0.8rem !important;
+    border-radius: 6px !important;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: 100%;
+}
+
+.integrity-btn:hover {
+    background: linear-gradient(135deg, #dc2626, #b91c1c) !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+

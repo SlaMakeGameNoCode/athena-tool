@@ -85,8 +85,9 @@ To ensure all entries are recorded under the correct working calendar date:
 
 ### L. Daily Time Allocation Rule
 WorkAI utilizes a Daily Time Allocation (timesheet calendar grid) to track timesheets:
-- **Rule**: All logged tasks must be placed into the correct day column of the **Daily Time Allocation** calendar. Adjusting the allocated hours (duration) will be managed **manually by the user**.
-- **Automation Behavior**: The `submitter.py` script creates issues via the "**+ Thêm issue**" button on the correct day column, which automatically places the issue into that day's schedule. The script does **NOT** adjust hours (default 0.1h) — the user will manually change the time allocation afterwards.
+- **Rule**: All logged tasks must be placed into the correct day column of the **Daily Time Allocation** calendar. 
+- **Automation Behavior**: The `submitter.py` script automatically allocates tasks to the Daily Time Allocation page and distributes the total of 8.0h evenly among them (e.g., if there are 4 tasks, each will get 2.0h). The user can still adjust hours manually if needed, but no manual step is required by default.
+
 
 ### M. Quy tắc sửa KPI Không đạt (CRITICAL)
 Nhiệm vụ của bạn (khi được yêu cầu sửa KPI) là sửa lại Tiêu đề/Summary của các đầu việc bị đánh giá là "Không đạt".

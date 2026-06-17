@@ -9,7 +9,7 @@ import os
 import sys
 import json
 
-APP_VERSION = "1.0.38"
+APP_VERSION = "1.0.39"
 
 app = FastAPI(title="Athena Assistant App")
 
@@ -1401,6 +1401,16 @@ def check_for_update(response: Response):
         return updater.check_update(current)
     except Exception as e:
         return {"has_update": False, "error": str(e)}
+
+@app.get("/api/update/check-files")
+def check_missing_files_endpoint(response: Response):
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    try:
+        import updater
+        return updater.check_missing_files(BASE_DIR)
+    except Exception as e:
+        return {"has_missing": False, "missing_files": [], "error": str(e)}
+
 
 @app.post("/api/update/apply")
 def apply_update_endpoint():

@@ -55,6 +55,22 @@ UPDATE_EXCLUDES = [
 ]
 
 
+def check_missing_files(base_dir):
+    """Quét danh sách UPDATE_INCLUDES và trả về các file/folder bị thiếu."""
+    missing = []
+    for item in UPDATE_INCLUDES:
+        path = os.path.join(base_dir, item)
+        if not os.path.exists(path):
+            missing.append(item)
+    return {
+        "has_missing": len(missing) > 0,
+        "missing_files": missing,
+        "total_expected": len(UPDATE_INCLUDES),
+        "total_found": len(UPDATE_INCLUDES) - len(missing)
+    }
+
+
+
 def get_local_version(base_dir):
     """Đọc phiên bản hiện tại từ version.json local."""
     version_file = os.path.join(base_dir, "version.json")

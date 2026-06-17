@@ -208,3 +208,27 @@ class WorkAIAPI:
             return False, f"Lỗi HTTP {response.status_code}"
         except Exception as e:
             return False, f"Lỗi kết nối: {str(e)}"
+
+    def create_time_allocation(self, issue_id, allocation_date, planned_hours=0.1, sort_order=0):
+        """
+        POST https://workai-be.horus.io.vn/api/time-allocations
+        Thêm issue vào bảng phân bổ thời gian.
+        """
+        url = f"{self.base_url}/time-allocations"
+        payload = {
+            "issue_id": int(issue_id),
+            "allocation_date": allocation_date,
+            "planned_hours": float(planned_hours),
+            "sort_order": sort_order
+        }
+        try:
+            response = requests.post(url, json=payload, headers=self.headers, timeout=15)
+            if response.status_code == 200 or response.status_code == 201:
+                res_data = response.json()
+                if res_data.get("success") or response.status_code == 201:
+                    return True, res_data
+                return False, res_data.get("message", "Thêm Time Allocation thất bại")
+            return False, f"Lỗi HTTP {response.status_code}"
+        except Exception as e:
+            return False, f"Lỗi kết nối: {str(e)}"
+
