@@ -196,8 +196,9 @@ def process_task(api: WorkAIAPI, task, idx, total, hours_per_task=0.1):
                 # Bước 3b: Thực hiện transition
                 trans_id = chosen_transition.get("id", "")
                 trans_name = chosen_transition.get("name", "")
+                transition_post_url = f"{api.base_url}/issues/{issue_id}/transition"
                 post_res = requests.post(
-                    transitions_url,
+                    transition_post_url,
                     json={"transition_id": trans_id},
                     headers=api.headers,
                     timeout=10

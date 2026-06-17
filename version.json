@@ -1,5 +1,5 @@
 {
-  "version": "1.0.50",
+  "version": "1.0.51",
   "released_at": "2026-06-17",
-  "changelog": "Bản cập nhật v1.0.50: Di chuyển banner cập nhật hệ thống lên đầu trang body để hiển thị ở mọi màn hình (Login, Setup, Main), giúp người dùng lần đầu cài đặt có thể bấm cập nhật ngay khi mở ứng dụng mà không bị kẹt ở màn hình Setup."
+  "changelog": "Bản cập nhật v1.0.51: Sửa lỗi đổi trạng thái issue sang Done/Review Approved thất bại do chuyển endpoint POST transitions từ số nhiều (/transitions) sang số ít (/transition) theo chuẩn mới của API WorkAI."
 }
