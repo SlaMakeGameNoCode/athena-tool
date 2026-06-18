@@ -1,5 +1,5 @@
 {
-  "version": "1.0.51",
-  "released_at": "2026-06-17",
-  "changelog": "Bản cập nhật v1.0.51: Sửa lỗi đổi trạng thái issue sang Done/Review Approved thất bại do chuyển endpoint POST transitions từ số nhiều (/transitions) sang số ít (/transition) theo chuẩn mới của API WorkAI."
+  "version": "1.0.52",
+  "released_at": "2026-06-18",
+  "changelog": "Bản cập nhật v1.0.52: Thay thế khung nhập JSON cấu hình GitLab bằng giao diện thêm dòng trực quan (+ Thêm Repository) tự động phân tách URL đầy đủ thành định dạng của hệ thống."
 }

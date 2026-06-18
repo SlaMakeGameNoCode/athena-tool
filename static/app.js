@@ -254,8 +254,28 @@ document.addEventListener('DOMContentLoaded', () => {
                                 createPlatformForm(p.type);
                                 const lastItem = platformsList.lastElementChild;
                                 if (p.url && lastItem.querySelector('.plat-url')) lastItem.querySelector('.plat-url').value = p.url;
-                                if (p.uid && lastItem.querySelector('.plat-uid')) lastItem.querySelector('.plat-uid').value = p.uid;
                                 if (p.token && lastItem.querySelector('.plat-token')) lastItem.querySelector('.plat-token').value = p.token;
+                                
+                                if (p.type === 'gitlab') {
+                                    const listContainer = lastItem.querySelector('.gitlab-repos-list');
+                                    if (listContainer && p.uid) {
+                                        try {
+                                            const repos = JSON.parse(p.uid);
+                                            if (Array.isArray(repos)) {
+                                                repos.forEach(repo => {
+                                                    const projectKey = repo["project-key"] || repo.project_key || "";
+                                                    const pathWithNamespace = repo.path_with_namespace || "";
+                                                    addGitlabRepoRow(listContainer, projectKey, pathWithNamespace);
+                                                });
+                                            }
+                                        } catch (e) {
+                                            console.error("Lỗi parse gitlab repos JSON:", e);
+                                            addGitlabRepoRow(listContainer);
+                                        }
+                                    }
+                                } else {
+                                    if (p.uid && lastItem.querySelector('.plat-uid')) lastItem.querySelector('.plat-uid').value = p.uid;
+                                }
                             });
                             updateActivePlatforms(config.platforms);
                         } else {
@@ -357,6 +377,65 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnAddPlatform = document.getElementById('btn-add-platform');
     const platformsList = document.getElementById('platforms-list');
 
+    function addGitlabRepoRow(container, projectKey = '', repoUrl = '') {
+        const row = document.createElement('div');
+        row.className = 'gitlab-repo-row';
+        row.style.display = 'flex';
+        row.style.gap = '8px';
+        row.style.marginBottom = '6px';
+        
+        row.innerHTML = `
+            <input type="text" class="repo-project-key" placeholder="WorkAI Key (VD: GRPG)" value="${projectKey}" style="width: 30%; margin-bottom: 0;">
+            <input type="text" class="repo-url" placeholder="Link GitLab repo hoặc path (VD: group/repo)" value="${repoUrl}" style="width: 60%; margin-bottom: 0;">
+            <button type="button" class="btn outline btn-remove-repo" style="width: 10%; padding: 4px 8px; margin-bottom: 0;">Xóa</button>
+        `;
+        
+        row.querySelector('.btn-remove-repo').addEventListener('click', () => {
+            row.remove();
+        });
+        
+        container.appendChild(row);
+    }
+
+    function collectPlatformsData() {
+        const platforms = [];
+        document.querySelectorAll('.platform-item').forEach(item => {
+            const type = item.dataset.type;
+            const plat = { type: type };
+            if (item.querySelector('.plat-url')) plat.url = item.querySelector('.plat-url').value.trim();
+            if (item.querySelector('.plat-token')) plat.token = item.querySelector('.plat-token').value.trim();
+            
+            if (type === 'gitlab') {
+                const repos = [];
+                item.querySelectorAll('.gitlab-repo-row').forEach(row => {
+                    const projectKey = row.querySelector('.repo-project-key').value.trim();
+                    let rawUrl = row.querySelector('.repo-url').value.trim();
+                    if (!rawUrl) return;
+                    
+                    let pathWithNamespace = rawUrl;
+                    pathWithNamespace = pathWithNamespace.replace(/https?:\/\//i, '');
+                    const slashIndex = pathWithNamespace.indexOf('/');
+                    if (slashIndex !== -1) {
+                        pathWithNamespace = pathWithNamespace.substring(slashIndex + 1);
+                    }
+                    pathWithNamespace = pathWithNamespace.replace(/\/+$/, '').replace(/\.git$/i, '');
+                    
+                    if (projectKey && pathWithNamespace) {
+                        repos.push({
+                            "project-key": projectKey,
+                            "path_with_namespace": pathWithNamespace
+                        });
+                    }
+                });
+                plat.uid = JSON.stringify(repos, null, 2);
+            } else {
+                if (item.querySelector('.plat-uid')) plat.uid = item.querySelector('.plat-uid').value.trim();
+            }
+            platforms.push(plat);
+        });
+        return platforms;
+    }
+
     function createPlatformForm(type) {
         const div = document.createElement('div');
         div.className = 'form-group platform-item';
@@ -422,7 +501,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                 <input type="text" class="plat-url" placeholder="Server URL (VD: http://git.horusent.com/)">
                 <input type="password" class="plat-token" placeholder="Personal Access Token (glpat-...)">
-                <textarea class="plat-uid" placeholder="Danh sách Repo dạng JSON (VD: [{&quot;project-key&quot;: &quot;GRPG&quot;, &quot;path_with_namespace&quot;: &quot;group/repo&quot;}])" style="width: 100%; height: 60px; padding: 8px; border-radius: 8px; border: 1px solid var(--panel-border); background: var(--input-bg); color: var(--text-primary); margin-top: 5px; font-family: monospace;"></textarea>
+                
+                <div class="gitlab-repos-container" style="margin-top: 10px; border: 1px dashed var(--panel-border); padding: 12px; border-radius: 8px; background: rgba(255,255,255,0.02);">
+                    <label style="font-size: 0.85rem; color: var(--text-secondary); display: block; margin-bottom: 8px;">Danh sách Repositories (Dự án)</label>
+                    <div class="gitlab-repos-list" style="display: flex; flex-direction: column; gap: 4px;"></div>
+                    <button type="button" class="btn outline btn-add-gitlab-repo" style="width: auto; padding: 6px 12px; font-size: 0.8rem; margin-top: 8px;">+ Thêm Repository</button>
+                </div>
             `;
         }
         
@@ -437,6 +521,20 @@ document.addEventListener('DOMContentLoaded', () => {
             btnManageBlacklist.addEventListener('click', () => {
                 showBlacklistModal();
             });
+        }
+
+        const btnAddRepo = div.querySelector('.btn-add-gitlab-repo');
+        if (btnAddRepo) {
+            const listContainer = div.querySelector('.gitlab-repos-list');
+            btnAddRepo.addEventListener('click', () => {
+                addGitlabRepoRow(listContainer);
+            });
+            // Auto add an empty row in next event loop tick if newly created
+            setTimeout(() => {
+                if (listContainer.children.length === 0) {
+                    addGitlabRepoRow(listContainer);
+                }
+            }, 0);
         }
 
         platformsList.appendChild(div);
@@ -461,15 +559,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const workaiUser = document.getElementById('setup-workai-user').value;
         const workaiPass = document.getElementById('setup-workai-pass').value;
 
-        const platforms = [];
-        document.querySelectorAll('.platform-item').forEach(item => {
-            const type = item.dataset.type;
-            const plat = { type: type };
-            if (item.querySelector('.plat-url')) plat.url = item.querySelector('.plat-url').value;
-            if (item.querySelector('.plat-uid')) plat.uid = item.querySelector('.plat-uid').value;
-            if (item.querySelector('.plat-token')) plat.token = item.querySelector('.plat-token').value;
-            platforms.push(plat);
-        });
+        const platforms = collectPlatformsData();
 
         const configData = {
             name, role,
@@ -1564,15 +1654,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const workaiUser = document.getElementById('setup-workai-user').value;
         const workaiPass = document.getElementById('setup-workai-pass').value;
 
-        const platforms = [];
-        document.querySelectorAll('.platform-item').forEach(item => {
-            const type = item.dataset.type;
-            const plat = { type: type };
-            if (item.querySelector('.plat-url')) plat.url = item.querySelector('.plat-url').value;
-            if (item.querySelector('.plat-uid')) plat.uid = item.querySelector('.plat-uid').value;
-            if (item.querySelector('.plat-token')) plat.token = item.querySelector('.plat-token').value;
-            platforms.push(plat);
-        });
+        const platforms = collectPlatformsData();
 
         const configData = {
             name, role,
