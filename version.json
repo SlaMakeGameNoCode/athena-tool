@@ -1,5 +1,5 @@
 {
-  "version": "1.0.52",
-  "released_at": "2026-06-18",
-  "changelog": "Bản cập nhật v1.0.52: Thay thế khung nhập JSON cấu hình GitLab bằng giao diện thêm dòng trực quan (+ Thêm Repository) tự động phân tách URL đầy đủ thành định dạng của hệ thống."
+  "version": "1.0.53",
+  "released_at": "2026-06-23",
+  "changelog": "Bản cập nhật v1.0.53: Khắc phục triệt để lỗi kết nối Google Gemini API (404 models/gemini-1.5-flash is not found for API version v1beta) bằng cách chuyển từ SDK google-generativeai sang gọi trực tiếp qua HTTP REST API bằng requests."
 }

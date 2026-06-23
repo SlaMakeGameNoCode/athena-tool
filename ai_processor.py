@@ -8,23 +8,116 @@ def call_ai_provider(provider, api_key, system_prompt, user_prompt, max_output_t
         
     if provider == "gemini":
         try:
-            import google.generativeai as genai
-            genai.configure(api_key=api_key)
-            gen_config = {}
-            if max_output_tokens:
-                # Giới hạn tối đa của gemini-1.5-flash là 8192
-                gen_config["max_output_tokens"] = min(max_output_tokens, 8192)
-            model = genai.GenerativeModel(
-                'gemini-1.5-flash',
-                system_instruction=system_prompt,
-                generation_config=gen_config if gen_config else None
-            )
-            response = model.generate_content(user_prompt)
-            return response.text
-        except ImportError:
-            raise Exception("Lỗi: Chưa cài đặt thư viện google-generativeai.")
+            import requests as http_requests
+            
+            # Danh sách các cấu hình (version, model_name) để thử theo thứ tự ưu tiên
+            configs_to_try = [
+                ("v1beta", "gemini-2.5-flash"),
+                ("v1", "gemini-2.5-flash"),
+                ("v1beta", "gemini-3.5-flash"),
+                ("v1", "gemini-3.5-flash"),
+                ("v1beta", "gemini-3.1-flash-lite"),
+                ("v1", "gemini-3.1-flash-lite"),
+                ("v1beta", "gemini-flash-latest"),
+                ("v1beta", "gemini-1.5-flash"),
+                ("v1", "gemini-1.5-flash"),
+                ("v1beta", "gemini-2.0-flash"),
+                ("v1", "gemini-2.0-flash"),
+                ("v1beta", "gemini-1.5-pro"),
+                ("v1", "gemini-1.5-pro"),
+            ]
+            
+            last_err = None
+            debug_logs = []
+            for version, model_name in configs_to_try:
+                url = f"https://generativelanguage.googleapis.com/{version}/models/{model_name}:generateContent?key={api_key}"
+                headers = {
+                    "Content-Type": "application/json"
+                }
+                
+                # Nếu là v1, ta ghép system_prompt vào user_prompt để tránh lỗi không hỗ trợ systemInstruction
+                if version == "v1" and system_prompt:
+                    actual_user_prompt = f"[SYSTEM INSTRUCTIONS]\n{system_prompt}\n\n[USER REQUEST]\n{user_prompt}"
+                else:
+                    actual_user_prompt = user_prompt
+                    
+                payload = {
+                    "contents": [
+                        {
+                            "parts": [
+                                {
+                                    "text": actual_user_prompt
+                                }
+                            ]
+                        }
+                    ]
+                }
+                
+                # systemInstruction chỉ gửi cho phiên bản v1beta
+                if version != "v1" and system_prompt:
+                    payload["systemInstruction"] = {
+                        "parts": [
+                            {
+                                "text": system_prompt
+                            }
+                        ]
+                    }
+                    
+                if max_output_tokens:
+                    payload["generationConfig"] = {
+                        "maxOutputTokens": min(max_output_tokens, 8192)
+                    }
+                
+                try:
+                    debug_logs.append(f"Trying: {version}/{model_name}")
+                    resp = http_requests.post(url, json=payload, headers=headers, timeout=15)
+                    debug_logs.append(f"  Status: {resp.status_code}")
+                    if resp.status_code == 200:
+                        res_data = resp.json()
+                        candidates = res_data.get("candidates", [])
+                        if candidates:
+                            text = candidates[0].get("content", {}).get("parts", [])[0].get("text", "")
+                            debug_logs.append("  Success!")
+                            # Lưu log trước khi return thành công
+                            try:
+                                with open("f:/prototype/Agent/gemini_test_log.txt", "w", encoding="utf-8") as df:
+                                    df.write("\n".join(debug_logs))
+                            except Exception:
+                                pass
+                            return text
+                    
+                    # Lấy thông tin lỗi chi tiết để ghi nhận
+                    try:
+                        err_data = resp.json()
+                        err_msg = err_data.get("error", {}).get("message", resp.text[:200])
+                    except Exception:
+                        err_msg = resp.text[:200]
+                    last_err = f"Google API Error {resp.status_code}: {err_msg}"
+                    debug_logs.append(f"  Error: {err_msg}")
+                    
+                    # In debug ra terminal để chẩn đoán
+                    print(f"[AI Debug] Thử {version}/{model_name} thất bại. Mã lỗi: {resp.status_code}. Chi tiết: {err_msg}")
+                    
+                    # Nếu lỗi 400 hoặc 404, tiếp tục thử các cấu hình khác
+                    if resp.status_code in [400, 404]:
+                        continue
+                except Exception as req_err:
+                    last_err = str(req_err)
+                    debug_logs.append(f"  Exception: {str(req_err)}")
+            
+            # Ghi log ra file khi toàn bộ thất bại
+            try:
+                with open("f:/prototype/Agent/gemini_test_log.txt", "w", encoding="utf-8") as df:
+                    df.write("\n".join(debug_logs))
+            except Exception:
+                pass
+            
+            if last_err:
+                raise Exception(last_err)
+            else:
+                raise Exception("Không tìm thấy model Gemini khả dụng nào hoạt động với API Key của bạn. Vui lòng kiểm tra lại xem dự án đã bật 'Generative Language API' trên Google Cloud chưa.")
         except Exception as e:
-            raise Exception(f"Lỗi gọi Gemini API: {e}")
+            raise Exception(f"Lỗi gọi Gemini API: {str(e)}")
             
     elif provider in ["openai", "deepseek"]:
         try:
