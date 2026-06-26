@@ -1,5 +1,5 @@
 {
-  "version": "1.0.53",
-  "released_at": "2026-06-23",
-  "changelog": "Bản cập nhật v1.0.53: Khắc phục triệt để lỗi kết nối Google Gemini API (404 models/gemini-1.5-flash is not found for API version v1beta) bằng cách chuyển từ SDK google-generativeai sang gọi trực tiếp qua HTTP REST API bằng requests."
+  "version": "1.0.54",
+  "released_at": "2026-06-26",
+  "changelog": "Bản cập nhật v1.0.54: Nâng cấp Tab 2 với các thẻ công việc trực quan, dropdown chọn dự án, tự động lưu, cho phép thêm task thủ công, cải tiến bộ lọc AI cho hội thoại nhóm."
 }
