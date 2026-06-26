@@ -51,6 +51,7 @@ UPDATE_EXCLUDES = [
     "submission_status.json",
     "last_sync.txt",
     "saved_kpi_tasks.json",
+    "processed_tasks.json",
     "ms-playwright",
 ]
 

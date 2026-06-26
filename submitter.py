@@ -142,15 +142,22 @@ def process_task(api: WorkAIAPI, task, idx, total, hours_per_task=0.1):
     update_status("running", idx - 1, total, f"Task {idx}/{total}: Đang tạo issue cho dự án {pc}...")
 
     # 1. Gọi API gợi ý mô tả từ AI của WorkAI
-    desc = ""
-    ac = ""
+    user_desc = task.get("description", "").strip()
+    user_ac = task.get("acceptance_criteria", "").strip()
+    
+    suggest_desc = ""
+    suggest_ac = ""
     suggest_ok, suggest_data = api.suggest_description(pc, title)
     if suggest_ok:
-        desc = suggest_data.get("description", "")
-        ac = suggest_data.get("acceptance_criteria", "")
+        suggest_desc = suggest_data.get("description", "")
+        suggest_ac = suggest_data.get("acceptance_criteria", "")
         print("         ✓ AI Description generated")
     else:
         print("         ⚠ Failed to generate AI description, creating empty description.")
+
+    # Ưu tiên sử dụng nội dung do người dùng chỉnh sửa hoặc AI sinh sẵn từ trước
+    desc = user_desc if user_desc else suggest_desc
+    ac = user_ac if user_ac else suggest_ac
 
     # 2. Tạo issue
     create_ok, res_data = api.quick_create_issue(

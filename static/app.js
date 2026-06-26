@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentRawFilter = 'all';
     let currentProcessedFilter = 'all';
     let activePlatforms = ['rocket'];
-    let processedTasksContent = '';
+    let processedTasksData = [];
 
     function updateActivePlatforms(platforms) {
         activePlatforms = ['rocket'];
@@ -126,18 +126,45 @@ document.addEventListener('DOMContentLoaded', () => {
         return { dateHeader, tasks };
     }
 
+    function escapeHtml(text) {
+        if (!text) return '';
+        return text
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    let saveTimeout = null;
+    function autoSaveTasks() {
+        if (saveTimeout) clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(async () => {
+            try {
+                const res = await fetch('/api/taoviec/tasks', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(processedTasksData)
+                });
+                if (res.ok) {
+                    console.log("Auto-save successful");
+                }
+            } catch (e) {
+                console.error("Auto-save failed:", e);
+            }
+        }, 500);
+    }
+
     function renderProcessedTasks() {
         const container = document.getElementById('processed-tasks-container');
         if (!container) return;
         
-        if (!processedTasksContent || processedTasksContent.includes('Chưa có dữ liệu')) {
-            container.innerHTML = `<div class="empty-state">Chưa có dữ liệu. Hãy bấm "2. Tạo việc".</div>`;
+        if (!processedTasksData || processedTasksData.length === 0) {
+            container.innerHTML = `<div class="empty-state">Chưa có dữ liệu. Hãy bấm "2. Tạo việc" hoặc "➕ Thêm task thủ công".</div>`;
             return;
         }
         
-        const { dateHeader, tasks } = parseProcessedTasks(processedTasksContent);
-        
-        const filteredTasks = tasks.filter(t => {
+        const filteredTasks = processedTasksData.filter(t => {
             if (currentProcessedFilter === 'all') return true;
             return t.platform === currentProcessedFilter;
         });
@@ -147,18 +174,98 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
-        let md = dateHeader + '\n\n';
-        filteredTasks.forEach((t, idx) => {
-            md += `## Task ${idx + 1}\n`;
-            t.rawLines.forEach(line => {
-                if (!line.startsWith('## Task')) {
-                    md += line + '\n';
+        container.innerHTML = '';
+        
+        filteredTasks.forEach((task, index) => {
+            const card = document.createElement('div');
+            card.className = 'task-card';
+            card.dataset.id = task.id || `task_${index + 1}`;
+            
+            // Build project dropdown options
+            let projectOptionsHtml = '<option value="">-- Chọn dự án --</option>';
+            projectsList.forEach(proj => {
+                const selected = task.project === proj.code ? 'selected' : '';
+                projectOptionsHtml += `<option value="${proj.code}" ${selected}>${proj.name} (${proj.code})</option>`;
+            });
+            
+            // Platform icon/badge
+            const platformIcon = task.platform === 'git' ? '🐱' : (task.platform === 'email' ? '✉️' : '💬');
+            
+            card.innerHTML = `
+                <div class="task-card-header">
+                    <span class="task-badge">Task #${index + 1}</span>
+                    <span class="platform-badge" title="Platform: ${task.platform}">${platformIcon} ${task.platform}</span>
+                    <button class="btn-delete-task" title="Xóa task">✕</button>
+                </div>
+                <div class="task-card-body">
+                    <div class="form-group" style="margin-bottom: 10px;">
+                        <label style="display: block; font-weight: bold; margin-bottom: 5px;">Dự án (Project)</label>
+                        <select class="task-project-select" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #444; background: #222; color: #fff;">
+                            ${projectOptionsHtml}
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 10px;">
+                        <label style="display: block; font-weight: bold; margin-bottom: 5px;">Tiêu đề (Title) - Dài tối thiểu 50 ký tự</label>
+                        <input type="text" class="task-title-input" value="${escapeHtml(task.title || '')}" placeholder="Đặt tiêu đề [Hành động] - [Mục tiêu]" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #444; background: #222; color: #fff;">
+                        <span class="char-count ${task.title && task.title.length >= 50 ? 'valid' : 'invalid'}" style="font-size: 0.75rem; display: block; margin-top: 3px;">
+                            ${task.title ? task.title.length : 0}/50 ký tự
+                        </span>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 10px;">
+                        <label style="display: block; font-weight: bold; margin-bottom: 5px;">Mô tả (Description) - Bắt buộc đủ 3 mục (Background, Objective, Notes)</label>
+                        <textarea class="task-desc-input" rows="6" placeholder="1. Background:\n\n2. Objective:\n\n3. Notes:" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #444; background: #222; color: #fff; font-family: inherit;">${escapeHtml(task.description || '')}</textarea>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 5px;">
+                        <label style="display: block; font-weight: bold; margin-bottom: 5px;">Tiêu chí nghiệm thu (Acceptance Criteria)</label>
+                        <textarea class="task-ac-input" rows="4" placeholder="Tiêu chí nghiệm thu (mỗi tiêu chí 1 dòng bắt đầu bằng - )..." style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #444; background: #222; color: #fff; font-family: inherit;">${escapeHtml(task.acceptance_criteria || '')}</textarea>
+                    </div>
+                </div>
+            `;
+            
+            const titleInput = card.querySelector('.task-title-input');
+            const projectSelect = card.querySelector('.task-project-select');
+            const descInput = card.querySelector('.task-desc-input');
+            const acInput = card.querySelector('.task-ac-input');
+            const charCount = card.querySelector('.char-count');
+            
+            titleInput.addEventListener('input', (e) => {
+                task.title = e.target.value;
+                charCount.textContent = `${task.title.length}/50 ký tự`;
+                if (task.title.length >= 50) {
+                    charCount.className = 'char-count valid';
+                    charCount.style.color = '#10b981';
+                } else {
+                    charCount.className = 'char-count invalid';
+                    charCount.style.color = '#ef4444';
+                }
+                autoSaveTasks();
+            });
+            
+            projectSelect.addEventListener('change', (e) => {
+                task.project = e.target.value;
+                autoSaveTasks();
+            });
+            
+            descInput.addEventListener('input', (e) => {
+                task.description = e.target.value;
+                autoSaveTasks();
+            });
+            
+            acInput.addEventListener('input', (e) => {
+                task.acceptance_criteria = e.target.value;
+                autoSaveTasks();
+            });
+            
+            card.querySelector('.btn-delete-task').addEventListener('click', () => {
+                if (confirm(`Bạn có chắc muốn xóa Task #${index + 1}?`)) {
+                    processedTasksData = processedTasksData.filter(t => t.id !== task.id);
+                    renderProcessedTasks();
+                    autoSaveTasks();
                 }
             });
-            md += '\n';
+            
+            container.appendChild(card);
         });
-        
-        container.innerHTML = `<pre style="white-space: pre-wrap; font-family: 'Inter', sans-serif;">${md.trim()}</pre>`;
     }
 
     // --- Init ---
@@ -1147,9 +1254,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch('/api/run/taoviec', { method: 'POST' });
             if(res.ok) {
                 const data = await res.json();
-                processedTasksContent = data.content; // Cập nhật biến dữ liệu để nút Nhập việc nhận biết
-                // Render markdown content
-                document.getElementById('processed-tasks-container').innerHTML = `<pre style="white-space: pre-wrap; font-family: 'Inter', sans-serif;">${data.content}</pre>`;
+                processedTasksData = data.tasks || []; // Cập nhật biến dữ liệu để nút Nhập việc nhận biết
+                renderProcessedTasks();
                 // Chuyển tab
                 document.querySelector('[data-tab="tab-processed"]').click();
             } else {
@@ -1159,6 +1265,25 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) {
             document.getElementById('processed-tasks-container').innerHTML = `<div class="error-text">Lỗi kết nối.</div>`;
         }
+    });
+
+    document.getElementById('btn-add-task').addEventListener('click', () => {
+        const newTask = {
+            id: 'task_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+            project: '',
+            platform: 'rocket',
+            title: '',
+            description: '1. Background:\n\n2. Objective:\n\n3. Notes:',
+            acceptance_criteria: '- '
+        };
+        if (!processedTasksData) processedTasksData = [];
+        processedTasksData.push(newTask);
+        renderProcessedTasks();
+        autoSaveTasks();
+        
+        // Scroll container to bottom
+        const container = document.getElementById('processed-tasks-container');
+        container.scrollTop = container.scrollHeight;
     });
 
     // Cancel button click event listener
@@ -1183,7 +1308,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('btn-tool-nhapviec').addEventListener('click', async () => {
         // Confirmation before proceeding
-        if (!processedTasksContent || processedTasksContent.includes('Chưa có dữ liệu')) {
+        if (!processedTasksData || processedTasksData.length === 0) {
             alert("Không có dữ liệu công việc đã tạo. Hãy bấm '2. Tạo việc' trước.");
             return;
         }
@@ -1386,11 +1511,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch('/api/taoviec/content');
             if(res.ok) {
                 const data = await res.json();
-                processedTasksContent = data.content;
+                processedTasksData = data.tasks || [];
                 renderProcessedTasks();
             }
         } catch(e) {
-            console.error("Lỗi khi tải nội dung memorytask.md:", e);
+            console.error("Lỗi khi tải danh sách công việc đã xử lý:", e);
         }
     }
 

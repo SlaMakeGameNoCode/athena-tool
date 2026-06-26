@@ -282,7 +282,7 @@ def run_tonghop(force: bool = False):
             
             try:
                 summarized_json_str = summarize_raw_chat(raw_data, provider, api_key, projects_list, user_name, user_role, rocket_username)
-                new_tasks = json.loads(summarized_json_str)
+                new_tasks = json.loads(summarized_json_str, strict=False)
                 # Assign unique ID (just timestamp + index) and status active
                 for i, t in enumerate(new_tasks):
                     t["id"] = f"task_{now_ms}_{i}"
@@ -959,15 +959,33 @@ def get_raw_tasks():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+def rebuild_processed_tasks_markdown(tasks):
+    from datetime import datetime
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    content = f"# Daily Tasks — {today_str}\n\n"
+    for idx, task in enumerate(tasks):
+        content += f"## Task {idx + 1}\n"
+        content += f"- **Project**: {task.get('project', '')}\n"
+        content += f"- **Platform**: {task.get('platform', 'rocket')}\n"
+        content += f"- **Title**: {task.get('title', '')}\n"
+        desc = task.get('description', '')
+        if desc:
+            content += f"- **Description**:\n{desc}\n"
+        ac = task.get('acceptance_criteria', '')
+        if ac:
+            content += f"- **Acceptance Criteria**:\n{ac}\n"
+        content += "\n"
+    return content.strip() + "\n"
+
 @app.get("/api/taoviec/content")
 def get_taoviec_content():
-    file_path = os.path.join(BASE_DIR, "memorytask.md")
+    file_path = os.path.join(BASE_DIR, "processed_tasks.json")
     if not os.path.exists(file_path):
-        return {"status": "success", "content": "Chưa có dữ liệu. Hãy bấm \"2. Tạo việc\"."}
+        return {"status": "success", "tasks": []}
     try:
         with open(file_path, "r", encoding="utf-8") as f:
-            content = f.read()
-        return {"status": "success", "content": content}
+            tasks = json.load(f)
+        return {"status": "success", "tasks": tasks}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -1029,17 +1047,56 @@ def run_taoviec():
     tasks_to_process = [t for t in raw_data if t.get("status") != "hide"]
             
     if not tasks_to_process:
-        return {"status": "success", "content": "Không có task nào để xử lý."}
+        return {"status": "success", "tasks": []}
         
     from ai_processor import generate_tasks
     try:
-        markdown_content = generate_tasks(tasks_to_process, provider, api_key)
+        json_content = generate_tasks(tasks_to_process, provider, api_key)
         
-        # Save to memorytask.md
-        with open(os.path.join(BASE_DIR, "memorytask.md"), "w", encoding="utf-8") as f:
-            f.write(markdown_content)
+        # Parse tasks
+        try:
+            tasks = json.loads(json_content, strict=False)
+        except Exception as e:
+            cleaned = json_content.strip()
+            if not cleaned.startswith("["):
+                start = cleaned.find("[")
+                end = cleaned.rfind("]")
+                if start != -1 and end != -1:
+                    cleaned = cleaned[start:end+1]
+            tasks = json.loads(cleaned, strict=False)
             
-        return {"status": "success", "content": markdown_content}
+        # Assign IDs and platform if missing
+        for i, t in enumerate(tasks):
+            t["id"] = t.get("id") or f"task_{i+1}"
+            if not t.get("platform"):
+                t["platform"] = "rocket"
+            
+        # Save to processed_tasks.json
+        with open(os.path.join(BASE_DIR, "processed_tasks.json"), "w", encoding="utf-8") as f:
+            json.dump(tasks, f, ensure_ascii=False, indent=2)
+            
+        # Rebuild and save memorytask.md for compatibility
+        md_content = rebuild_processed_tasks_markdown(tasks)
+        with open(os.path.join(BASE_DIR, "memorytask.md"), "w", encoding="utf-8") as f:
+            f.write(md_content)
+            
+        return {"status": "success", "tasks": tasks}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/taoviec/tasks")
+def update_taoviec_tasks(tasks: list):
+    try:
+        # Save to processed_tasks.json
+        with open(os.path.join(BASE_DIR, "processed_tasks.json"), "w", encoding="utf-8") as f:
+            json.dump(tasks, f, ensure_ascii=False, indent=2)
+            
+        # Rebuild and save memorytask.md
+        md_content = rebuild_processed_tasks_markdown(tasks)
+        with open(os.path.join(BASE_DIR, "memorytask.md"), "w", encoding="utf-8") as f:
+            f.write(md_content)
+            
+        return {"status": "success", "message": "Đã lưu thay đổi công việc."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -1091,46 +1148,37 @@ def run_submitter_process():
 @app.post("/api/run/nhapviec")
 def run_nhapviec():
     try:
-        memory_path = os.path.join(BASE_DIR, "memorytask.md")
-        if not os.path.exists(memory_path):
-            raise Exception("Không tìm thấy memorytask.md. Hãy Tạo việc trước.")
+        json_path = os.path.join(BASE_DIR, "processed_tasks.json")
+        if not os.path.exists(json_path):
+            raise Exception("Không tìm thấy processed_tasks.json. Hãy Tạo việc trước.")
             
-        with open(memory_path, "r", encoding="utf-8") as f:
-            lines = f.readlines()
+        with open(json_path, "r", encoding="utf-8") as f:
+            tasks = json.load(f)
             
-        # Very basic parser for memorytask.md -> tasks.json
         parsed_tasks = []
-        current_task = {}
-        for line in lines:
-            line = line.strip()
-            if line.startswith("## Task"):
-                if current_task and "title" in current_task:
-                    current_task["status"] = "Done"
-                    current_task["sprint"] = "latest"
-                    from datetime import datetime
-                    current_task["date"] = datetime.now().strftime("%Y-%m-%d")
-                    parsed_tasks.append(current_task)
-                current_task = {}
-            elif line.startswith("- **Project**:"):
-                current_task["project"] = line.split(":", 1)[1].strip()
-            elif line.startswith("- **Title**:"):
-                current_task["title"] = line.split(":", 1)[1].strip()
-                    
-        if current_task and "title" in current_task:
-            current_task["status"] = "Done"
-            current_task["sprint"] = "latest"
-            from datetime import datetime
-            current_task["date"] = datetime.now().strftime("%Y-%m-%d")
-            parsed_tasks.append(current_task)
+        from datetime import datetime
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        
+        for t in tasks:
+            parsed_tasks.append({
+                "project": t.get("project", ""),
+                "platform": t.get("platform", "rocket"),
+                "title": t.get("title", ""),
+                "description": t.get("description", ""),
+                "acceptance_criteria": t.get("acceptance_criteria", ""),
+                "status": "Done",
+                "sprint": "latest",
+                "date": today_str
+            })
             
         with open(os.path.join(BASE_DIR, "tasks.json"), "w", encoding="utf-8") as f:
             json.dump(parsed_tasks, f, ensure_ascii=False, indent=2)
-
+ 
         # Reset status file
         status_file = os.path.join(BASE_DIR, "submission_status.json")
         with open(status_file, "w", encoding="utf-8") as f:
             json.dump({"status": "running", "current": 0, "total": len(parsed_tasks), "msg": "Đang chuẩn bị khởi động kịch bản..."}, f, ensure_ascii=False, indent=2)
-
+ 
         # Run submitter in a separate thread
         thread = threading.Thread(target=run_submitter_process, daemon=True)
         thread.start()
@@ -1492,15 +1540,12 @@ def ai_chat(req: ChatRequest):
     
     try:
         if req.active_tab == "tab-processed":
-            file_path = os.path.join(BASE_DIR, "memorytask.md")
+            file_path = os.path.join(BASE_DIR, "processed_tasks.json")
             if not os.path.exists(file_path):
-                return {"reply": "Chưa có file memorytask.md để sửa."}
+                return {"reply": "Chưa có file processed_tasks.json để sửa."}
             with open(file_path, "r", encoding="utf-8") as f:
-                content = f.read()
+                all_tasks = json.load(f)
                 
-            # Parse markdown and partition tasks based on platform filter
-            header_lines, all_tasks = parse_memorytask_markdown(content)
-            
             # Identify visible tasks matching processed_filter
             processed_filter = req.processed_filter.lower()
             visible_tasks = []
@@ -1514,31 +1559,55 @@ def ai_chat(req: ChatRequest):
             if not visible_tasks:
                 return {"reply": "Không tìm thấy công việc nào khớp với bộ lọc để gửi cho AI."}
                 
-            # Build markdown only containing visible tasks to send to AI
-            visible_content = rebuild_memorytask_markdown(header_lines, visible_tasks)
-            new_content = edit_task_with_ai(visible_content, req.message, provider, api_key)
+            # Send visible tasks JSON to AI
+            visible_json_str = json.dumps(visible_tasks, ensure_ascii=False, indent=2)
+            new_content = edit_task_with_ai(visible_json_str, req.message, provider, api_key)
             
-            # Thử parse JSON từ AI phản hồi
             try:
-                parsed = json.loads(new_content)
-                updated_content = parsed.get("updated_content", "")
+                parsed = json.loads(new_content, strict=False)
+                updated_tasks_json = parsed.get("updated_content", "")
                 explanation = parsed.get("explanation", "Đã cập nhật lại nội dung ở Tab 2.")
-            except Exception:
-                # Fallback nếu AI trả về raw markdown trực tiếp
-                updated_content = new_content
-                explanation = "Đã cập nhật lại nội dung ở Tab 2."
                 
-            # Parse the updated visible tasks markdown
-            _, updated_tasks = parse_memorytask_markdown(updated_content)
-            
-            # Merge updated tasks back into original tasks
-            merged_tasks = merge_processed_tasks(all_tasks, updated_tasks, visible_indices)
-            
-            # Reconstruct final markdown with original structure preserved
-            final_markdown = rebuild_memorytask_markdown(header_lines, merged_tasks)
-            
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(final_markdown)
+                if isinstance(updated_tasks_json, str):
+                    updated_tasks = json.loads(updated_tasks_json, strict=False)
+                else:
+                    updated_tasks = updated_tasks_json
+                    
+                # Merge updated tasks back into original tasks
+                new_tasks = list(all_tasks)
+                for idx, orig_idx in enumerate(visible_indices):
+                    if idx < len(updated_tasks):
+                        new_tasks[orig_idx] = updated_tasks[idx]
+                if len(updated_tasks) > len(visible_indices):
+                    for extra_task in updated_tasks[len(visible_indices):]:
+                        new_tasks.append(extra_task)
+                elif len(updated_tasks) < len(visible_indices):
+                    temp_tasks = []
+                    removed_indices = set(visible_indices[len(updated_tasks):])
+                    for i, t in enumerate(all_tasks):
+                        if i in removed_indices:
+                            continue
+                        if i in visible_indices[:len(updated_tasks)]:
+                            temp_tasks.append(updated_tasks[visible_indices.index(i)])
+                        else:
+                            temp_tasks.append(t)
+                    new_tasks = temp_tasks
+                
+                for i, t in enumerate(new_tasks):
+                    if not t.get("id"):
+                        t["id"] = f"task_{i+1}"
+                        
+                with open(file_path, "w", encoding="utf-8") as f:
+                    json.dump(new_tasks, f, ensure_ascii=False, indent=2)
+                    
+                # Also rebuild memorytask.md
+                md_content = rebuild_processed_tasks_markdown(new_tasks)
+                with open(os.path.join(BASE_DIR, "memorytask.md"), "w", encoding="utf-8") as f:
+                    f.write(md_content)
+                    
+            except Exception as e:
+                print(f"Error parsing AI reply: {e}")
+                explanation = f"Lỗi xử lý phản hồi từ AI: {str(e)}"
                 
             return {"reply": explanation}
             

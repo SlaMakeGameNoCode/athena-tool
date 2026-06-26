@@ -26,6 +26,7 @@ When summarizing daily Rocket.Chat logs, you must strictly follow these rules:
   - Business discussions (e.g. copyright registration, monetization).
   - Performance reviews and HR decisions (e.g. intern probation evaluations).
   - **Meeting Announcements & Petitions**: Scan notification channels (see Section F below) to capture calendars, meetings, and system approvals.
+  - **Conversational Context (NEW)**: Nếu `Chu Văn Mai` có tham gia nhắn tin trực tiếp trong một cuộc thảo luận nhóm, AI cần phân tích các tin nhắn phản hồi trực tiếp hoặc liền kề có liên quan trong luồng đó (kể cả khi người khác không tag tên) để lấy đầy đủ ngữ cảnh công việc.
 - **Noise Elimination**: Automatically filter out and discard:
   - General chat, gossiping, and jokes.
   - Team logistics (e.g. company trip details, vehicle arrangements).
